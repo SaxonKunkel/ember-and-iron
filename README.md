@@ -17,7 +17,9 @@ On Android, open the link in Chrome and choose **Install app** (or **Add to Home
 ## What's in the game
 
 - A 96×96 generated map with fog of war, and up to 3 AI rivals (Easy, Normal or Hard; free-for-all or allied against you).
-- Eight civilizations: Vikings, English, Germans, French, Mongols, Byzantines, Arabs and Spanish. Each has its own bonuses and a unique unit trained at the Keep.
+- Four map types: Land, Lakes, Coastal (a central sea) and Islands (every town on its own island). Map visibility can be Hidden, Explored or All visible.
+- Eight civilizations: Vikings, English, Germans, French, Mongols, Byzantines, Arabs and Spanish. Each has its own bonuses (one of them at sea) and a unique unit trained at the Keep; the Vikings also get the Longboat.
+- Fishing and sea battles: Docks, Fishing Ships, deep-water fish, Fish Traps, War Galleys, Fire Ships, Demolition Ships and Transports. The AI rivals fish, fight for the sea and ship armies across the water.
 - Villagers, spearmen, archers, scout riders, knights, monks, battering rams, mangonels and trebuchets. Spearmen beat cavalry, cavalry beat archers, and archers beat spearmen.
 - Sheep you can herd (or steal), deer, fish, berries and farms; walls, gates and watchtowers; relics that monks carry to a Monastery.
 - Touch controls for phones: tap to select, Box select, pinch to zoom, press and hold any button for its tooltip, and a Hide button that clears the panel off the map.

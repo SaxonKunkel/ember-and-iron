@@ -265,7 +265,7 @@ body.nopanel #msgs{bottom:calc(44px + var(--sb))}
         <label>Rivals play</label>
         <div class="seg" id="modeSeg"><button data-m="ffa" class="on">Free-for-all</button><button data-m="allied">Allied vs you</button></div>
         <label>Map type</label>
-        <div class="seg" id="mapSeg"><button data-mt="land" class="on">Land</button><button data-mt="lakes">Lakes</button><button data-mt="coastal">Coastal</button></div>
+        <div class="seg" id="mapSeg"><button data-mt="land" class="on">Land</button><button data-mt="lakes">Lakes</button><button data-mt="coastal">Coastal</button><button data-mt="islands">Islands</button></div>
         <div class="revealnote" id="mapNote"></div>
         <label>Map visibility</label>
         <div class="seg" id="revealSeg"><button data-r="normal" class="on">Hidden</button><button data-r="explored">Explored</button><button data-r="all">All visible</button></div>
@@ -293,6 +293,7 @@ body.nopanel #msgs{bottom:calc(44px + var(--sb))}
           <li><b>Fishing:</b> villagers can fish shore fish. A <b>Dock</b> (built in the water against the shore) trains <b>Fishing Ships</b>, which also reach deep-water fish further out and build <b>Fish Traps</b> &mdash; endless food on the water. Pick the <b>Lakes</b> or <b>Coastal</b> map type for lots of water.</li>
           <li><b>Sea battles</b> (Town Age, at the Dock): the <b>War Galley</b> shoots arrows at ships and at anything near the shore; the <b>Fire Ship</b> burns galleys at close range and shrugs off arrows; the <b>Demolition Ship</b> rams and explodes, wrecking Fire Ships and bunched-up fleets &mdash; but galleys sink it before it arrives. Towers and Town Centers shoot ships too.</li>
           <li><b>Transports</b> carry 5 units. Select units and right-click (or tap) your Transport to board; then right-click a spot on the shore to sail there and land them, or press <b>Unload</b>. If a Transport sinks, everyone aboard is lost.</li>
+          <li><b>Map types:</b> Land, Lakes, Coastal (a central sea) and <b>Islands</b> &mdash; every town on its own island, so armies cross by Transport. Rivals fish, fight for the sea and land troops on your shore; watch for the warning when their Transports set sail. Every civilization has a sea bonus (hover your civ name), and the Vikings build the <b>Longboat</b> at the Dock in the Castle Age.</li>
           <li><b>Walls:</b> pick Stone Wall and drag to draw a line. Place a Gate on one of your walls to let your units through.</li>
           <li><b>Fight:</b> right-click an enemy to attack, or press <kbd>Q</kbd> and click to attack-move. Your Town Center shoots arrows at raiders.</li>
         </ul>
@@ -449,6 +450,9 @@ const UNITS = {
   demoship: { name: 'Demolition Ship', cls: 'demo', naval: true, age: 2, hp: 30, atk: 140, armor: 0, parmor: 0, range: 0.5, reload: 1, speed: 2.2, los: 7, pop: 1, blast: 1.9, navalTargets: true,
     cost: { wood: 70, gold: 50 }, time: 25, hotkey: 'E', bonus: { building: 80 },
     desc: 'A fast boat packed with powder. Rams an enemy ship or shore building and explodes, wrecking everything nearby — itself included. Galleys sink it before it gets close.' },
+  longboat: { name: 'Longboat', civ: 'vikings', cls: 'ship', naval: true, age: 3, hp: 130, atk: 6, armor: 0, parmor: 4, range: 7, reload: 2.5, speed: 2.6, los: 9, pop: 1, volley: 3,
+    cost: { wood: 100, gold: 40 }, time: 30, hotkey: 'Y', projectile: true, bonus: { ship: 4, demo: 24, building: 4 },
+    desc: 'Viking unique warship (Castle Age, at the Dock). Fast dragon-prowed raider that looses three arrows at once, at up to three different targets.' },
 };
 const BUILDINGS = {
   towncenter: { name: 'Town Center', age: 1, size: 3, hp: 1800, armor: 1, parmor: 6, cost: { wood: 275, stone: 100 }, time: 90, los: 8, pop: 5,
@@ -480,13 +484,14 @@ const BUILDINGS = {
   gate: { name: 'Gate', age: 1, size: 1, hp: 900, armor: 4, parmor: 8, cost: { stone: 30 }, time: 20, los: 2, gate: true, hotkey: 'O',
     desc: 'Your units walk through; enemies cannot. Can be placed over one of your walls.' },
   // naval buildings stand in the water: a Dock must touch the shore, a Fish Trap can go anywhere on open water
-  dock: { name: 'Dock', age: 1, size: 3, hp: 1800, armor: 1, parmor: 6, cost: { wood: 150 }, time: 35, los: 6, naval: true, drop: ['food'], trains: ['fishingship', 'transport', 'galley', 'fireship', 'demoship'], hotkey: 'J',
+  dock: { name: 'Dock', age: 1, size: 3, hp: 1800, armor: 1, parmor: 6, cost: { wood: 150 }, time: 35, los: 6, naval: true, drop: ['food'], trains: ['fishingship', 'transport', 'galley', 'fireship', 'demoship', 'longboat'], hotkey: 'J',
     desc: 'Built in the water against the shore. Trains Fishing Ships, Transports and (Town Age) warships, and takes food from fishing. Villagers can drop food here too.' },
   fishtrap: { name: 'Fish Trap', age: 1, size: 2, hp: 250, armor: 0, parmor: 0, cost: { wood: 80 }, time: 20, los: 1, naval: true, walkable: true, farm: true, requires: 'dock', hotkey: 'T',
     desc: 'A farm on the water: endless food for the Fishing Ship that works it. Built by Fishing Ships; requires a Dock.' },
 };
 const BUILD_ORDER = ['house', 'farm', 'mill', 'lumbercamp', 'miningcamp', 'dock', 'barracks', 'archeryrange', 'stable', 'monastery', 'siegeworkshop', 'watchtower', 'keep', 'wall', 'gate', 'towncenter'];
 UNITS.villager.builds = BUILD_ORDER;
+const WARSHIPS = ['galley', 'fireship', 'demoship', 'longboat'];
 const canBuildType = (u, type) => !!(UNITS[u.type].builds && UNITS[u.type].builds.includes(type));
 const isNavalB = t => !!BUILDINGS[t].naval;
 const RES_NODES = {
@@ -505,7 +510,7 @@ const GATHER_RATE = { wood: 0.6, gold: 0.55, stone: 0.5, berries: 0.75, farm: 0.
 const FOOD_NODES = { sheep: 0, deer: 2, berries: 3, fish: 5 };
 const SHIP_FOOD_NODES = { fish: 0, deepfish: 0 };
 // Map types chosen before the game. Islands arrives with transport ships.
-const MAP_TYPES = { land: 'Land', lakes: 'Lakes', coastal: 'Coastal' };
+const MAP_TYPES = { land: 'Land', lakes: 'Lakes', coastal: 'Coastal', islands: 'Islands' };
 const RELIC_GOLD = 0.5, RELIC_WIN_TIME = 240;   // gold/s per relic; hold every relic this long to win
 // Research: `at` = building that researches it, `age` = minimum age, `fx` = effects (see applyTech).
 const TECHS = {
@@ -535,9 +540,9 @@ const TECHS = {
   heavygalley: { name: 'Heavy Galleys', at: 'dock', age: 3, cost: { food: 250, gold: 200 }, time: 55, icon: 'atk', fx: { unitType: ['galley', { hp: 40, atk: 2, range: 1, parmor: 1 }] }, desc: 'War Galleys gain +40 HP, +2 attack, +1 range and +1 arrow armor.' },
 };
 const DIFFS = {
-  easy:   { label: 'Easy',   barracksAt: 12, age2Vils: 13, age3At: 1e9, towers: 0, monks: 1, trainSpeed: 0.7,  gather: 0.85, maxVils: 16, firstWave: 600, waveEvery: 210, waveBase: 4, waveGrow: 2, barracks: 1, armyCap: 14 },
-  normal: { label: 'Normal', barracksAt: 10, age2Vils: 15, age3At: 720, towers: 1, monks: 2, trainSpeed: 1.0,  gather: 1.0,  maxVils: 24, firstWave: 450, waveEvery: 165, waveBase: 6, waveGrow: 3, barracks: 1, armyCap: 26 },
-  hard:   { label: 'Hard',   barracksAt: 8, age2Vils: 16, age3At: 600, towers: 2, monks: 3, trainSpeed: 1.3,  gather: 1.15, maxVils: 32, firstWave: 330, waveEvery: 130, waveBase: 8, waveGrow: 4, barracks: 2, armyCap: 40 },
+  easy:   { label: 'Easy',   barracksAt: 12, age2Vils: 13, age3At: 1e9, towers: 0, monks: 1, trainSpeed: 0.7,  gather: 0.85, maxVils: 16, firstWave: 600, waveEvery: 210, waveBase: 4, waveGrow: 2, barracks: 1, armyCap: 14, fishShips: 2, fleet: 2 },
+  normal: { label: 'Normal', barracksAt: 10, age2Vils: 15, age3At: 720, towers: 1, monks: 2, trainSpeed: 1.0,  gather: 1.0,  maxVils: 24, firstWave: 450, waveEvery: 165, waveBase: 6, waveGrow: 3, barracks: 1, armyCap: 26, fishShips: 4, fleet: 4 },
+  hard:   { label: 'Hard',   barracksAt: 8, age2Vils: 16, age3At: 600, towers: 2, monks: 3, trainSpeed: 1.3,  gather: 1.15, maxVils: 32, firstWave: 330, waveEvery: 130, waveBase: 8, waveGrow: 4, barracks: 2, armyCap: 40, fishShips: 6, fleet: 6 },
 };
 for (const k in UNITS) UNITS[k].key = k;
 for (const k in BUILDINGS) BUILDINGS[k].key = k;
@@ -548,30 +553,37 @@ for (const k in TECHS) TECHS[k].key = k;
 const unitCls = c => d => d.cls === c;
 const CIVS = {
   vikings: { name: 'Vikings', tag: 'Norse raiders and seafarers of Scandinavia', favor: 'infantry', unique: 'berserker', crest: '#7fa9c9',
-    bonuses: ['Infantry +15% HP', 'Plunder: razing a building yields 25% of its cost in gold', 'Wood +15% (shipbuilding timber)', 'Barracks works 20% faster'],
-    apply(p) { addUnitMod(p, unitCls('infantry'), 'hp', d => Math.round(d.hp * 0.15)); p.mods.plunder = 0.25; p.mods.gather.wood += 0.15; p.mods.trainAt.barracks = 1.2; } },
+    bonuses: ['Infantry +15% HP', 'Plunder: razing a building yields 25% of its cost in gold', 'Wood +15% (shipbuilding timber)', 'Barracks works 20% faster', 'Sea: warships cost 15% less, and the unique Longboat (Castle Age, Dock)'],
+    apply(p) { addUnitMod(p, unitCls('infantry'), 'hp', d => Math.round(d.hp * 0.15)); p.mods.plunder = 0.25; p.mods.gather.wood += 0.15; p.mods.trainAt.barracks = 1.2;
+      for (const k of WARSHIPS) p.mods.cost[k] = 0.85; } },
   english: { name: 'English', tag: 'Yeoman longbowmen and wool merchants', favor: 'archer', unique: 'longbowman', crest: '#d23a3a',
-    bonuses: ['Archers +1 range', 'Sheep gathered 25% faster (the wool trade)', 'Farms cost 25% less', 'Archery Range works 15% faster'],
-    apply(p) { addUnitMod(p, unitCls('archer'), 'range', 1); p.mods.node.sheep = 1.25; p.mods.cost.farm = 0.75; p.mods.trainAt.archeryrange = 1.15; } },
+    bonuses: ['Archers +1 range', 'Sheep gathered 25% faster (the wool trade)', 'Farms cost 25% less', 'Archery Range works 15% faster', 'Sea: Fishing Ships gather 20% faster (North Sea herring)'],
+    apply(p) { addUnitMod(p, unitCls('archer'), 'range', 1); p.mods.node.sheep = 1.25; p.mods.cost.farm = 0.75; p.mods.trainAt.archeryrange = 1.15;
+      p.mods.node.deepfish = 1.2; p.mods.node.fishtrap = 1.2; } },
   germans: { name: 'Germans', tag: 'Princes and knightly orders of the Holy Roman Empire', favor: 'infantry', unique: 'landsknecht', crest: '#c9c9c9',
-    bonuses: ['Gold and stone mining +20% (the silver mines)', 'Infantry +1 armor and +1 arrow armor (heavy plate)', 'Monks heal 50% faster and have +15 HP', 'Barracks upgrades cost 30% less'],
+    bonuses: ['Gold and stone mining +20% (the silver mines)', 'Infantry +1 armor and +1 arrow armor (heavy plate)', 'Monks heal 50% faster and have +15 HP', 'Barracks upgrades cost 30% less', 'Sea: Docks and Dock upgrades cost 30% less (the Hanseatic League)'],
     apply(p) { p.mods.gather.gold += 0.2; p.mods.gather.stone += 0.2; addUnitMod(p, unitCls('infantry'), 'armor', 1); addUnitMod(p, unitCls('infantry'), 'parmor', 1);
-      p.mods.heal += 0.5; addUnitMod(p, unitCls('monk'), 'hp', 15); for (const k in TECHS) if (TECHS[k].at === 'barracks') p.mods.cost[k] = 0.7; } },
+      p.mods.heal += 0.5; addUnitMod(p, unitCls('monk'), 'hp', 15); for (const k in TECHS) if (TECHS[k].at === 'barracks' || TECHS[k].at === 'dock') p.mods.cost[k] = 0.7; p.mods.cost.dock = 0.7; } },
   french: { name: 'French', tag: 'Chivalry and great castles of the kingdom of France', favor: 'cavalry', unique: 'chevalier', crest: '#5a7ee0',
-    bonuses: ['Cavalry +20% HP', 'Food +10% (rich farmland)', 'Keeps cost 25% less', 'Stable works 15% faster'],
-    apply(p) { addUnitMod(p, unitCls('cavalry'), 'hp', d => Math.round(d.hp * 0.2)); p.mods.gather.food += 0.1; p.mods.cost.keep = 0.75; p.mods.trainAt.stable = 1.15; } },
+    bonuses: ['Cavalry +20% HP', 'Food +10% (rich farmland)', 'Keeps cost 25% less', 'Stable works 15% faster', 'Sea: ships +15% HP (the royal galleys)'],
+    apply(p) { addUnitMod(p, unitCls('cavalry'), 'hp', d => Math.round(d.hp * 0.2)); p.mods.gather.food += 0.1; p.mods.cost.keep = 0.75; p.mods.trainAt.stable = 1.15;
+      addUnitMod(p, d => d.naval, 'hp', d => Math.round(d.hp * 0.15)); } },
   mongols: { name: 'Mongols', tag: 'Horse archers of the great steppe empire', favor: 'cavalry', unique: 'steppearcher', crest: '#b07a3e',
-    bonuses: ['Cavalry move 15% faster', 'Hunting +50%', 'Scout Riders cost 25% less', 'Siege Workshop works 25% faster (captured engineers)'],
-    apply(p) { addUnitMod(p, unitCls('cavalry'), 'speed', d => Math.round(d.speed * 15) / 100); p.mods.node.deer = 1.5; p.mods.cost.scout = 0.75; p.mods.trainAt.siegeworkshop = 1.25; } },
+    bonuses: ['Cavalry move 15% faster', 'Hunting +50%', 'Scout Riders cost 25% less', 'Siege Workshop works 25% faster (captured engineers)', 'Sea: Transports carry twice as many and move 25% faster (the invasion fleets)'],
+    apply(p) { addUnitMod(p, unitCls('cavalry'), 'speed', d => Math.round(d.speed * 15) / 100); p.mods.node.deer = 1.5; p.mods.cost.scout = 0.75; p.mods.trainAt.siegeworkshop = 1.25;
+      addUnitMod(p, d => d.key === 'transport', 'capacity', 5); addUnitMod(p, d => d.key === 'transport', 'speed', d => Math.round(d.speed * 25) / 100); } },
   byzantines: { name: 'Byzantines', tag: 'Heirs of Rome behind the walls of Constantinople', favor: null, unique: 'varangian', crest: '#9b4fb0',
-    bonuses: ['Buildings +20% HP (the great land walls)', 'Spearmen and Scout Riders cost 25% less', 'Towers, Keeps and Town Centers +2 attack (Greek fire)', 'Monks convert 25% faster'],
-    apply(p) { p.mods.bldHp = 1.2; p.mods.cost.spearman = 0.75; p.mods.cost.scout = 0.75; p.mods.bld.atk = (p.mods.bld.atk || 0) + 2; p.mods.convert += 0.25; } },
+    bonuses: ['Buildings +20% HP (the great land walls)', 'Spearmen and Scout Riders cost 25% less', 'Towers, Keeps and Town Centers +2 attack (Greek fire)', 'Monks convert 25% faster', 'Sea: Fire Ships +30% attack (Greek fire)'],
+    apply(p) { p.mods.bldHp = 1.2; p.mods.cost.spearman = 0.75; p.mods.cost.scout = 0.75; p.mods.bld.atk = (p.mods.bld.atk || 0) + 2; p.mods.convert += 0.25;
+      addUnitMod(p, d => d.key === 'fireship', 'atk', 2); } },   // 2 + 5 vs ships = 7 → 9: about +30%
   arabs: { name: 'Arabs', tag: 'Caliphs, scholars and caravan traders', favor: 'archer', unique: 'camelrider', crest: '#2f9a5a',
-    bonuses: ['Gold +15% (caravan trade)', 'Upgrades cost 25% less (House of Wisdom)', 'Archery Range works 20% faster', 'Relics produce 50% more gold'],
-    apply(p) { p.mods.gather.gold += 0.15; for (const k in TECHS) if (!TECHS[k].fx.age) p.mods.cost[k] = 0.75; p.mods.trainAt.archeryrange = 1.2; p.mods.relicGold = 1.5; } },
+    bonuses: ['Gold +15% (caravan trade)', 'Upgrades cost 25% less (House of Wisdom)', 'Archery Range works 20% faster', 'Relics produce 50% more gold', 'Sea: ships move 10% faster, and Fishing Ships cost 20% less (the dhows)'],
+    apply(p) { p.mods.gather.gold += 0.15; for (const k in TECHS) if (!TECHS[k].fx.age) p.mods.cost[k] = 0.75; p.mods.trainAt.archeryrange = 1.2; p.mods.relicGold = 1.5;
+      addUnitMod(p, d => d.naval, 'speed', d => Math.round(d.speed * 10) / 100); p.mods.cost.fishingship = 0.8; } },
   spanish: { name: 'Spanish', tag: 'Kingdoms of the Reconquista, land of castles', favor: 'cavalry', unique: 'jinete', crest: '#e8a317',
-    bonuses: ['Villagers build 30% faster', 'Walls, gates, towers and Keeps cost 20% less', 'Cavalry +1 attack', 'Stable works 15% faster'],
-    apply(p) { p.mods.build += 0.3; for (const k of ['wall', 'gate', 'watchtower', 'keep']) p.mods.cost[k] = 0.8; addUnitMod(p, unitCls('cavalry'), 'atk', 1); p.mods.trainAt.stable = 1.15; } },
+    bonuses: ['Villagers build 30% faster', 'Walls, gates, towers and Keeps cost 20% less', 'Cavalry +1 attack', 'Stable works 15% faster', 'Sea: War Galleys +1 range, +1 armor and +1 arrow armor (Mediterranean fleets)'],
+    apply(p) { p.mods.build += 0.3; for (const k of ['wall', 'gate', 'watchtower', 'keep']) p.mods.cost[k] = 0.8; addUnitMod(p, unitCls('cavalry'), 'atk', 1); p.mods.trainAt.stable = 1.15;
+      for (const k of ['range', 'armor', 'parmor']) addUnitMod(p, d => d.key === 'galley', k, 1); } },
 };
 // each civilization's veteran upgrade for its unique unit (researched at the Keep)
 for (const k in CIVS) {
@@ -720,13 +732,19 @@ function genMap(seed, mapType = 'land') {
   const quant = (arr, q) => { const s = Array.from(arr).sort((a, b) => a - b); return s[Math.floor(q * (s.length - 1))]; };
   // water: Land = a few small ponds, Lakes = big lakes between the towns, Coastal = a great sea in the middle
   const fT = quant(fv, 0.80), wT = quant(wv, mapType === 'lakes' ? 0.79 : 0.955);
-  const C0 = (MAP_W - 1) / 2;
+  const C0 = (MAP_W - 1) / 2, RELIC_ISLES = rots(14, C0);
   for (let y = 0; y < MAP_H; y++) for (let x = 0; x < MAP_W; x++) {
     const i = idx(x, y), d = dB(x, y), edge = Math.min(x, y, MAP_W - 1 - x, MAP_H - 1 - y);
     let t = T.GRASS;
     if (d > 13 && fv[i] > fT) t = T.FOREST;
     if (edge < 2 && d > 10 && sym(nE, x, y) > 0.42) t = T.FOREST;
     if (mapType === 'coastal') { if (d > 17 && dist(x, y, C0, C0) < 26 + (wv[i] - 0.5) * 14) t = T.WATER; }
+    else if (mapType === 'islands') {
+      // each town on its own island, plus four small relic islands between them and a gold island in the middle
+      const nz = (wv[i] - 0.5);
+      const land = d < 20 + nz * 7 || dist(x, y, C0, C0) < 7 + nz * 4 || RELIC_ISLES.some(([a, b]) => dist(x, y, a, b) < 4.8 + nz * 2);
+      if (!land) t = T.WATER;
+    }
     else if (d > (mapType === 'lakes' ? 15 : 17) && wv[i] > wT) t = T.WATER;
     terrain[i] = t;
   }
@@ -816,7 +834,8 @@ function genMap(seed, mapType = 'land') {
     return seen;
   };
   let seen = flood();
-  for (const bb of B.slice(1)) {
+  if (mapType === 'islands') for (let i = 0; i < NT; i++) seen[i] = walk(i) ? 1 : 0;   // islands are meant to be cut off: no land bridges
+  else for (const bb of B.slice(1)) {
     if (seen[idx(bb.x, bb.y)]) continue;
     const steps = Math.ceil(dist(B[0].x, B[0].y, bb.x, bb.y) * 2);
     for (let s = 0; s <= steps; s++) { const t = s / steps; const x = B[0].x + (bb.x - B[0].x) * t, y = B[0].y + (bb.y - B[0].y) * t;
@@ -862,7 +881,7 @@ function exposedTree(i) {
   const x = i % MAP_W, y = (i / MAP_W) | 0;
   return isWalk(x + 1, y) || isWalk(x - 1, y) || isWalk(x, y + 1) || isWalk(x, y - 1);
 }
-function findTree(x, y, maxR) { const tx = Math.floor(x), ty = Math.floor(y), r2 = maxR * maxR; for (const s of SPIRAL) { if (s[2] > r2) break; const xx = tx + s[0], yy = ty + s[1]; if (inB(xx, yy) && exposedTree(idx(xx, yy))) return idx(xx, yy); } return -1; }
+function findTree(x, y, maxR, lc = -1) { const tx = Math.floor(x), ty = Math.floor(y), r2 = maxR * maxR; for (const s of SPIRAL) { if (s[2] > r2) break; const xx = tx + s[0], yy = ty + s[1]; if (inB(xx, yy) && exposedTree(idx(xx, yy)) && (lc < 0 || compMaps().land[idx(xx, yy)] === lc)) return idx(xx, yy); } return -1; }
 function removeTree(i) { M.terrain[i] = T.GRASS; M.wood[i] = 0; refreshSolid(i); markTileDirty(i); }
 function rectOf(e) { return e.kind === 'building' ? [e.x, e.y, e.x + e.w, e.y + e.h] : [e.x, e.y, e.x + 1, e.y + 1]; }
 function tileRect(e) { return e.kind === 'building' ? [e.x, e.y, e.x + e.w - 1, e.y + e.h - 1] : [e.x, e.y, e.x, e.y]; }
@@ -1112,20 +1131,23 @@ function nearestDrop(owner, res, x, y, naval) {
 // naval = for a Fishing Ship: Fish Traps and fish only; otherwise land farms and everything villagers can reach.
 function findGatherTarget(owner, res, x, y, maxR, excludeFarm, naval) {
   if (naval && res !== 'food') return null;
-  if (res === 'wood') { const t = findTree(x, y, maxR); return t >= 0 ? { tree: t } : null; }
+  // villagers only look on the land they stand on (no gold or trees across the water)
+  const lc = naval ? -1 : landComp(x, y), reach = (ex, ey) => lc < 0 || landComp(ex, ey) === lc;
+  if (res === 'wood') { const t = findTree(x, y, maxR, lc); return t >= 0 ? { tree: t } : null; }
   let best = null, bd = maxR;
-  if (res === 'food') for (const b of W.buildings) if (b.owner === owner && b.built && BUILDINGS[b.type].farm && !!BUILDINGS[b.type].naval === !!naval && b.id !== excludeFarm && !farmerActive(b)) { const d = dist(x, y, b.cx, b.cy); if (d < bd) { bd = d; best = b; } }
+  if (res === 'food') for (const b of W.buildings) if (b.owner === owner && b.built && BUILDINGS[b.type].farm && !!BUILDINGS[b.type].naval === !!naval && b.id !== excludeFarm && !farmerActive(b) && (naval || reach(b.cx, b.cy))) { const d = dist(x, y, b.cx, b.cy); if (d < bd) { bd = d; best = b; } }
   if (best) return best;
   if (res === 'food') {
     const table = naval ? SHIP_FOOD_NODES : FOOD_NODES;
     for (const n of W.nodes) {
       const pen = table[n.type]; if (pen === undefined || n.dead) continue;
+      if (!naval && n.type !== 'fish' && !reach(n.cx, n.cy)) continue;
       if (n.type === 'sheep' && n.hp > 0 && n.herd >= 0 && n.herd !== owner) continue;   // someone else's flock
       const d = dist(x, y, n.cx, n.cy) + pen; if (d < bd) { bd = d; best = n; }
     }
     return best;
   }
-  for (const n of W.nodes) if (n.type === res && !n.dead) { const d = dist(x, y, n.cx, n.cy); if (d < bd) { bd = d; best = n; } }
+  for (const n of W.nodes) if (n.type === res && !n.dead && reach(n.cx, n.cy)) { const d = dist(x, y, n.cx, n.cy); if (d < bd) { bd = d; best = n; } }
   return best;
 }
 const isGatherable = e => e.kind === 'res' && !!RES_NODES[e.type].res;
@@ -1382,8 +1404,9 @@ function updateAnimals() {
     if (n.type === 'sheep') {
       if ((G.tick + n.id) % 10 === 0) claimSheep(n);
       if (n.herd < 0) continue;
-      let tc = null, bd = 1e9;
-      for (const b of W.buildings) if (b.owner === n.herd && b.type === 'towncenter' && b.built && !b.dead) { const d = dist(b.cx, b.cy, n.cx, n.cy); if (d < bd) { bd = d; tc = b; } }
+      // sheep can't swim: only a Town Center on the same land counts as home
+      let tc = null, bd = 1e9; const lc = landComp(n.cx, n.cy);
+      for (const b of W.buildings) if (b.owner === n.herd && b.type === 'towncenter' && b.built && !b.dead && landComp(b.cx, b.cy) === lc) { const d = dist(b.cx, b.cy, n.cx, n.cy); if (d < bd) { bd = d; tc = b; } }
       if (!tc) continue;
       const a = n.id * 2.4, gx = tc.cx + Math.cos(a) * 3.4, gy = tc.cy + Math.sin(a) * 3.4, dd = dist(n.cx, n.cy, gx, gy);
       if (dd <= 0.5) { n.path = null; continue; }
@@ -1648,7 +1671,14 @@ function taskAttack(u, t) {
       if (d.stone) fireStone(u, e, atk, d);
       else {
         const dmg = calcDamage(atk, d.bonus, e, !!d.projectile);
-        if (d.projectile) fireArrow(u.x, u.y, e, dmg, u.owner, u.id);
+        if (d.projectile) {
+          fireArrow(u.x, u.y, e, dmg, u.owner, u.id);
+          if (d.volley) {   // Longboat: the other arrows go to other enemies in range (or the same one)
+            const rng = ust(u.owner, u.type, 'range') + 0.5, extra = [];
+            queryUnits(u.x, u.y, rng, v => { if (v !== e && isEnemy(u.owner, v.owner) && dist(u.x, u.y, v.x, v.y) <= rng && extra.length < d.volley - 1) extra.push(v); });
+            for (let k = 0; k < d.volley - 1; k++) { const t2 = extra[k] || e; fireArrow(u.x + (k + 1) * 0.1, u.y, t2, calcDamage(atk, d.bonus, t2, true), u.owner, u.id); }
+          }
+        }
         else { applyDamage(e, dmg, u, u.owner); if (d.flame) { u.flameT = G.time; u.flameTo = e.id; sfxAt('flame', u.x, u.y); } else sfxAt(d.siege ? 'ram' : 'hit', u.x, u.y); }
       }
     }
@@ -1749,6 +1779,9 @@ function aiThink(ai) {
   const base = aiShares(hasBarracks), shares = {}; let tot = 0;
   const wantBarracks = (vils.length >= D.barracksAt && of('barracks').length < 1) || (vils.length >= 18 && of('barracks').length < D.barracks);
   if (wantBarracks) base.wood += 0.15;
+  // saving up for a Dock (decided by aiNaval's look at the water last time round)
+  const wantDock = !!(ai.sea && ai.sea.shore && !blds.some(b => b.type === 'dock') && (ai.sea.fish >= 3 || ai.sea.cut) && vils.length >= (ai.sea.cut ? 7 : 11));
+  if (wantDock) base.wood += 0.12;
   const wantAge2 = p.age === 1 && vils.length >= D.age2Vils && hasBarracks && !techQueued(p, 'age2');
   const wantAge3 = p.age === 2 && G.time >= D.age3At && vils.length >= D.maxVils - 4 && !techQueued(p, 'age3');
   if (wantAge2 || wantAge3) base.food += 0.12;
@@ -1826,7 +1859,7 @@ function aiThink(ai) {
     const wantFood = Math.round(vils.length * shares.food);
     const bushes = W.nodes.filter(n => FOOD_NODES[n.type] !== undefined && !(n.type === 'sheep' && n.herd >= 0 && n.herd !== pid) && dist(n.cx, n.cy, home.x, home.y) < 18).length;
     const farms = of('farm').length;
-    if (farms < wantFood - Math.min(bushes, 5) && p.res.wood >= 60 + (wantBarracks ? 175 : 0) &&!blds.some(b => b.type === 'farm' && !b.built)) aiBuild(ai, 'farm', { x: (mill.cx + home.x) / 2, y: (mill.cy + home.y) / 2 }, vils);
+    if (farms < wantFood - Math.min(bushes, 5) && p.res.wood >= 60 + (wantBarracks ? 175 : 0) + (wantDock ? 150 : 0) &&!blds.some(b => b.type === 'farm' && !b.built)) aiBuild(ai, 'farm', { x: (mill.cx + home.x) / 2, y: (mill.cy + home.y) / 2 }, vils);
   }
   // 4. idle villagers → resource with the biggest shortfall
   const counts = { food: 0, wood: 0, gold: 0, stone: 0 };
@@ -1843,13 +1876,13 @@ function aiThink(ai) {
   const mon = of('monastery').find(b => b.built);
   if (mon && !mon.queue.length && monks.length < D.monks && p.res.gold >= 100 + (saving ? 200 : 20)) queueUnit(mon, 'monk');
   // hold wood back for a Monastery / Siege Workshop so troop spending can't starve them forever
-  const woodReserve = (p.age >= 2 && vils.length >= 12 && !of('monastery').length ? 175 : 0) + (p.age >= 3 && of('keep').some(b => b.built) && !of('siegeworkshop').length ? 200 : 0);
+  const woodReserve = (p.age >= 2 && vils.length >= 12 && !of('monastery').length ? 175 : 0) + (p.age >= 3 && of('keep').some(b => b.built) && !of('siegeworkshop').length ? 200 : 0) + (wantDock ? 150 : 0);
   // 5. military production
   if (milPriority || vils.length >= Math.min(10, D.maxVils * 0.5)) {
     const w = aiUnitWeights(pid, army);
     for (const b of blds) {
       const trains = BUILDINGS[b.type].trains;
-      if (!trains || b.type === 'towncenter' || b.type === 'monastery' || !b.built || b.queue.length >= 2 || army.length + queued >= D.armyCap + (p.age >= 3 ? 10 : 0)) continue;
+      if (!trains || b.type === 'towncenter' || b.type === 'monastery' || b.type === 'dock' || !b.built || b.queue.length >= 2 || army.length + queued >= D.armyCap + (p.age >= 3 ? 10 : 0)) continue;
       const opts = trains.filter(t => meetsReq(p, UNITS[t]) && canAfford(p, costOf(p, UNITS[t])));
       if (!opts.length) continue;
       let type = null, best = -1;
@@ -1863,25 +1896,172 @@ function aiThink(ai) {
       if (p.res.food - (c.food || 0) >= reserve) { queueUnit(b, type); queued++; }
     }
   }
+  // 5b. the navy: Dock, fishing, warships, transports (warships deal with ships; the army below ignores them)
+  aiNaval(ai, { pid, p, D, home, blds, ships, army, vils, popFree, saving, hasBarracks });
   // 6. defend the base
   let threat = null, td = 16;
-  queryUnits(home.x, home.y, 16, v => { if (!isEnemy(pid, v.owner)) return; const d = dist(v.x, v.y, home.x, home.y); if (d < td) { td = d; threat = v; } });
+  queryUnits(home.x, home.y, 16, v => { if (!isEnemy(pid, v.owner) || UNITS[v.type].naval) return; const d = dist(v.x, v.y, home.x, home.y); if (d < td) { td = d; threat = v; } });
   if (!threat && ai.alert && G.time - ai.alert.t < 4 && dist(ai.alert.x, ai.alert.y, home.x, home.y) < 24) threat = ai.alert;
   // monks: fetch relics, convert raiders, otherwise trail the army (they heal on their own when idle)
   if (monks.length) aiMonks(ai, monks, army, home, threat);
   if (threat) {
     for (const a of army) if (!a.task || (a.task.type === 'move' && !a.task.am)) orderMove(a, threat.x, threat.y, true);
-  } else if (G.time >= ai.nextWave && (army.length >= ai.waveSize || (G.time >= ai.nextWave + 90 && army.length >= Math.ceil(ai.waveSize * 0.6)))) {
-    // 7. attack waves
+  } else if (!ai.inv && G.time >= ai.nextWave && (army.length >= ai.waveSize || (G.time >= ai.nextWave + 90 && army.length >= Math.ceil(ai.waveSize * 0.6)))) {
+    // 7. attack waves (across the water by Transport when the target can't be reached on foot)
     const tg = aiTarget(pid, home);
-    if (tg) {
+    if (tg && !sameLand(home, tg)) { if (!aiInvade(ai, tg, army, ships)) ai.nextWave = G.time + 20; }
+    else if (tg) {
       for (const a of army) orderMove(a, tg.x, tg.y, true);
       ai.nextWave = G.time + D.waveEvery; ai.waveSize += D.waveGrow; ai.waves++;
       if (tg.owner === HUMAN) msg('Enemy soldiers are marching on your town!', true);
     }
   }
   // soldiers left idle far from home keep pushing
-  for (const a of army) if (!a.task && dist(a.x, a.y, home.x, home.y) > 20) { const tg = aiTarget(pid, a); if (tg) orderMove(a, tg.x, tg.y, true); }
+  for (const a of army) if (!a.task && dist(a.x, a.y, home.x, home.y) > 20) { const tg = aiTarget(pid, a); if (tg && sameLand(a, tg)) orderMove(a, tg.x, tg.y, true); }
+}
+// --- connected land and water areas (terrain only, so they never change during a game) ---
+function compMaps() {
+  if (W.comp && W.compFor === M) return W.comp;
+  const land = new Int32Array(NT).fill(-1), water = new Int32Array(NT).fill(-1); let n = 0;
+  const fill = (arr, i0, ok) => { const q = [i0]; arr[i0] = n; while (q.length) { const c = q.pop(), x = c % MAP_W, y = (c / MAP_W) | 0;
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nx = x + dx, ny = y + dy; if (!inB(nx, ny)) continue; const j = idx(nx, ny); if (arr[j] < 0 && ok(j)) { arr[j] = n; q.push(j); } } } n++; };
+  for (let i = 0; i < NT; i++) {
+    if (M.terrain[i] === T.WATER) { if (water[i] < 0) fill(water, i, j => M.terrain[j] === T.WATER); }
+    else if (land[i] < 0) fill(land, i, j => M.terrain[j] !== T.WATER);
+  }
+  const wsize = new Int32Array(n); for (let i = 0; i < NT; i++) if (water[i] >= 0) wsize[water[i]]++;
+  W.comp = { land, water, wsize }; W.compFor = M; return W.comp;
+}
+// the AI's shore: a water tile next to land on the biggest body of water near home (not a pond or a cut-off corner)
+function aiShore(home, maxR = 30) {
+  const C = compMaps(), tx = Math.floor(home.x), ty = Math.floor(home.y), lc = landComp(home.x, home.y);
+  let best = null, bs = -1;
+  for (const s of SPIRAL) { if (s[2] > maxR * maxR) break; const x = tx + s[0], y = ty + s[1]; if (!inB(x, y)) continue; const i = idx(x, y);
+    if (M.wsolid[i]) continue; const wc = C.water[i]; if (wc < 0 || C.wsize[wc] <= bs) continue;
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nx = x + dx, ny = y + dy; if (inB(nx, ny) && C.land[idx(nx, ny)] === lc && !M.solid[idx(nx, ny)]) { best = { x: x + 0.5, y: y + 0.5 }; bs = C.wsize[wc]; break; } } }
+  return best;
+}
+const tileAt = (x, y) => idx(clamp(Math.floor(x), 0, MAP_W - 1), clamp(Math.floor(y), 0, MAP_H - 1));
+const landComp = (x, y) => compMaps().land[tileAt(x, y)], waterComp = (x, y) => compMaps().water[tileAt(x, y)];
+function sameLand(a, b) { const A = landComp(a.x, a.y); return A >= 0 && A === landComp(b.x, b.y); }
+// a land tile on the target's shore that touches water `wc`: where an invasion lands
+function aiLanding(tg, wc) {
+  const lc = landComp(tg.x, tg.y), tx = Math.floor(tg.x), ty = Math.floor(tg.y);
+  for (const s of SPIRAL) { const x = tx + s[0], y = ty + s[1]; if (!inB(x, y)) continue; const i = idx(x, y);
+    if (compMaps().land[i] !== lc || M.solid[i]) continue;
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nx = x + dx, ny = y + dy; if (inB(nx, ny) && compMaps().water[idx(nx, ny)] === wc && !M.wsolid[idx(nx, ny)]) return { x: x + 0.5, y: y + 0.5 }; } }
+  return null;
+}
+// nearest enemy ship, Dock or Fish Trap on our water
+function aiNavalTarget(pid, wc, from) {
+  let best = null, bd = 1e9;
+  for (const u of W.units) if (isEnemy(pid, u.owner) && UNITS[u.type].naval && waterComp(u.x, u.y) === wc) { const d = dist(u.x, u.y, from.x, from.y); if (d < bd) { bd = d; best = { x: u.x, y: u.y, owner: u.owner }; } }
+  for (const b of W.buildings) if (!b.dead && isEnemy(pid, b.owner) && BUILDINGS[b.type].naval && waterComp(b.cx, b.cy) === wc) { const d = dist(b.cx, b.cy, from.x, from.y) + 8; if (d < bd) { bd = d; best = { x: b.cx, y: b.cy, owner: b.owner }; } }
+  return best;
+}
+function aiNaval(ai, c) {
+  const { pid, p, D, home, blds, ships, army, vils, popFree, saving, hasBarracks } = c;
+  const of = t => blds.filter(b => b.type === t);
+  // our stretch of water, how much fish it holds, and whether any rival can only be reached by sea
+  if (!ai.sea || G.time - ai.sea.t > 90) {
+    const sp = aiShore(home, 30), wc = sp ? waterComp(sp.x, sp.y) : -1;
+    let fish = 0; if (sp) for (const n of W.nodes) if (!n.dead && SHIP_FOOD_NODES[n.type] !== undefined && waterComp(n.cx, n.cy) === wc && dist(n.cx, n.cy, sp.x, sp.y) < 26) fish++;
+    const cut = W.buildings.some(b => !b.dead && b.type === 'towncenter' && isEnemy(pid, b.owner) && !sameLand(home, { x: b.cx, y: b.cy }));
+    ai.sea = { t: G.time, shore: sp, wc, fish, cut };
+  }
+  const S = ai.sea; if (!S.shore) return;
+  const docks = of('dock'), dock = docks.find(b => b.built);
+  const enemyShips = W.units.filter(u => isEnemy(pid, u.owner) && UNITS[u.type].naval && waterComp(u.x, u.y) === S.wc);
+  // 1. a Dock, once the town is going (sooner when the sea is the only way to the enemy)
+  if (!docks.length && (S.fish >= 3 || S.cut || enemyShips.length) && vils.length >= (S.cut ? 7 : 11)) aiBuild(ai, 'dock', S.shore, vils);
+  if (!dock) { ai.inv = null; return; }
+  const queuedAt = t => docks.reduce((s, b) => s + b.queue.filter(x => x === t).length, 0);
+  const canQ = () => dock.queue.length < 2 && popFree > 0 && !saving;
+  // 2. fishing: ships on fish, then Fish Traps when the fish run out
+  const fishers = ships.filter(s => s.type === 'fishingship');
+  const wantFish = Math.min(D.fishShips + (G.mapType === 'islands' ? 2 : 0), S.fish * 2 + of('fishtrap').length + 1);
+  if (canQ() && fishers.length + queuedAt('fishingship') < wantFish && p.res.wood >= costOf(p, UNITS.fishingship).wood + 40) queueUnit(dock, 'fishingship');
+  for (const f of fishers) if (!f.task) {
+    const t = findGatherTarget(pid, 'food', dock.cx, dock.cy, 34, 0, true);
+    if (t && (t.kind === 'building' || waterComp(t.cx, t.cy) === waterComp(f.x, f.y))) { orderGather(f, t); continue; }
+    if (p.res.wood >= costOf(p, BUILDINGS.fishtrap).wood + 60) { const s = aiFindSpot('fishtrap', dock.cx, dock.cy);
+      if (s && waterComp(s.x + 1, s.y + 1) === waterComp(f.x, f.y)) { pay(p, costOf(p, BUILDINGS.fishtrap)); orderBuild(f, placeBuilding('fishtrap', pid, s.x, s.y, false)); } }
+  }
+  // 3. warships: match what the enemy has on our water
+  const war = ships.filter(s => !UNITS[s.type].civilian), enemyWar = enemyShips.filter(u => !UNITS[u.type].civilian);
+  const enemyDock = W.buildings.some(b => !b.dead && isEnemy(pid, b.owner) && b.type === 'dock' && waterComp(b.cx, b.cy) === S.wc);
+  let wantWar = 0;
+  if (p.age >= 2) wantWar = enemyWar.length ? Math.min(enemyWar.length + 2, 16) : (enemyDock || S.cut) ? D.fleet : G.mapType === 'coastal' ? Math.ceil(D.fleet / 2) : 0;
+  if (p.age >= 3 && wantWar) wantWar += 2;
+  const qWar = WARSHIPS.reduce((s, t) => s + queuedAt(t), 0);
+  if (canQ() && war.length + qWar < wantWar) {
+    const n = enemyWar.length || 1, cnt = t => enemyWar.filter(u => u.type === t).length, mine = t => war.filter(u => u.type === t).length;
+    const w = { galley: 1 + 2 * cnt('demoship') / n + (enemyWar.length ? 0 : 0.5), longboat: 0, fireship: 0.5 + 2.2 * (cnt('galley') + cnt('longboat')) / n,
+      demoship: mine('demoship') < war.length * 0.3 ? 0.2 + 1.8 * cnt('fireship') / n : 0 };
+    if (p.civ === 'vikings') w.longboat = 2.2;
+    let type = null, best = 0;
+    for (const t in w) { if (!w[t] || !meetsReq(p, UNITS[t])) continue; const cst = costOf(p, UNITS[t]); if (!RES.every(r => !cst[r] || p.res[r] >= cst[r] + 30)) continue;
+      const sc = w[t] * (0.75 + aiRand() * 0.5); if (sc > best) { best = sc; type = t; } }
+    if (type) queueUnit(dock, type);
+  }
+  // 4. transports, when the enemy is across the water
+  const transports = ships.filter(s => s.type === 'transport');
+  const wantT = S.cut && hasBarracks ? Math.min(3, Math.ceil(Math.max(ai.waveSize, 5) / ust(pid, 'transport', 'capacity'))) : 0;
+  if (canQ() && transports.length + queuedAt('transport') < wantT && p.res.wood >= costOf(p, UNITS.transport).wood + 30) queueUnit(dock, 'transport');
+  // 5. the fleet: defend our water, then sweep the enemy's ships, Docks and Fish Traps
+  let navThreat = null, nd = 24;
+  for (const u of enemyShips) { const d = Math.min(dist(u.x, u.y, home.x, home.y), dist(u.x, u.y, dock.cx, dock.cy)); if (d < nd) { nd = d; navThreat = u; } }
+  for (const s of war) {
+    if (s.task && s.task.type === 'attack') continue;
+    if (navThreat) { if (!s.task || !s.task.am) orderMove(s, navThreat.x, navThreat.y, true); }
+    else if (!s.task && dist(s.x, s.y, S.shore.x, S.shore.y) > 30 && G.time >= (ai.nextNaval || 0)) orderMove(s, S.shore.x, S.shore.y);
+  }
+  if (!navThreat && war.length >= Math.max(3, wantWar) && G.time >= (ai.nextNaval || 0)) {
+    const tg = aiNavalTarget(pid, S.wc, { x: dock.cx, y: dock.cy });
+    if (tg) { for (const s of war) if (!s.task || s.task.type === 'move') orderMove(s, tg.x, tg.y, true); ai.nextNaval = G.time + 75; }
+  }
+  // 6. an invasion under way
+  if (ai.inv) aiInvasionStep(ai, D, war, S);
+}
+// Start a sea invasion of `tg`: load the army onto Transports at our shore. Returns false if we can't yet.
+function aiInvade(ai, tg, army, ships) {
+  const S = ai.sea; if (!S || !S.shore) return false;
+  const trs = ships.filter(s => s.type === 'transport' && !s.task && !(s.load > 0) && waterComp(s.x, s.y) === S.wc);
+  if (!trs.length) return false;
+  const land = aiLanding(tg, S.wc); if (!land) return false;
+  const cap = trs.reduce((s, t) => s + capacityOf(t), 0);
+  const riders = army.filter(u => !u.task || u.task.type === 'move').sort((a, b) => dist(a.x, a.y, S.shore.x, S.shore.y) - dist(b.x, b.y, S.shore.x, S.shore.y)).slice(0, cap);
+  if (riders.length < Math.min(4, cap)) return false;
+  let k = 0;
+  for (const t of trs) { orderMove(t, S.shore.x, S.shore.y); for (let j = 0; j < capacityOf(t) && k < riders.length; j++) orderBoard(riders[k++], t); }
+  ai.inv = { phase: 'board', t0: G.time, target: tg, land, ships: trs.map(t => t.id), riders: riders.map(u => u.id) };
+  return true;
+}
+function aiInvasionStep(ai, D, war, S) {
+  const I = ai.inv, trs = I.ships.map(E).filter(s => s && !s.dead), riders = I.riders.map(E).filter(u => u && !u.dead);
+  if (!trs.length) { ai.inv = null; return; }
+  if (I.phase === 'board') {
+    for (const u of riders) if (!u.carriedBy && !u.task) { const t = trs.find(s => cargoOf(s).length < capacityOf(s)); if (t) orderBoard(u, t); }
+    const aboard = riders.filter(u => u.carriedBy).length;
+    if (aboard && (aboard === riders.length || G.time - I.t0 > 45)) {
+      I.phase = 'sail'; I.t1 = G.time;
+      for (const u of riders) if (!u.carriedBy && u.task && u.task.type === 'board') u.task = null;
+      for (const s of trs) if (s.load > 0) orderFerry(s, I.land.x, I.land.y);
+      for (const w of war) if (!w.task || w.task.type === 'move') orderMove(w, I.land.x, I.land.y, true);   // escort
+      if (I.target.owner === HUMAN) msg('Enemy transports are sailing for your shore!', true);
+    } else if (G.time - I.t0 > 80) { for (const u of riders) if (u.task && u.task.type === 'board') u.task = null; for (const s of trs) if (s.load > 0) unloadShip(s); ai.inv = null; ai.nextWave = G.time + 30; }
+    return;
+  }
+  const loaded = trs.filter(s => s.load > 0);
+  if (!loaded.length) {
+    // everyone is ashore (or lost): march on the target, send the Transports home for the next wave
+    for (const u of riders) if (!u.carriedBy) orderMove(u, I.target.x, I.target.y, true);
+    for (const s of trs) orderMove(s, S.shore.x, S.shore.y);
+    ai.inv = null; ai.nextWave = G.time + D.waveEvery; ai.waveSize += D.waveGrow; ai.waves++;
+    return;
+  }
+  if (G.time - I.t1 > 110) { for (const s of loaded) if (!unloadShip(s)) orderFerry(s, S.shore.x, S.shore.y); return; }
+  for (const s of loaded) if (!s.task) orderFerry(s, I.land.x, I.land.y);   // a landing that failed: try again
 }
 function aiMonks(ai, monks, army, home, threat) {
   const pid = ai.pid, claimed = new Set();
@@ -2249,7 +2429,7 @@ function drawShip(c, type, col, x, y, s, face, anim, carry, work) {
 }
 // Galley (long, oars, ram), Fire Ship (brazier, dark sail), Demolition Ship (low raft of powder kegs), Transport (wide, cargo)
 function drawWarship(c, type, col, x, y, s, face, anim, load, work) {
-  const g = type === 'galley', fire = type === 'fireship', demo = type === 'demoship', tr = type === 'transport';
+  const lb = type === 'longboat', g = type === 'galley' || lb, fire = type === 'fireship', demo = type === 'demoship', tr = type === 'transport';
   const L = (g ? 0.82 : demo ? 0.5 : tr ? 0.72 : 0.7) * s, Wd = (g ? 0.22 : demo ? 0.22 : tr ? 0.32 : 0.24) * s, bob = Math.sin(anim * 2.2) * 0.02 * s;
   c.save(); c.translate(x, y + bob); c.rotate(face);
   c.fillStyle = 'rgba(220,240,255,.28)'; c.beginPath(); c.ellipse(-L * 0.9, 0, L * 0.45, Wd * 0.9, 0, 0, TAU); c.fill();
@@ -2261,7 +2441,11 @@ function drawWarship(c, type, col, x, y, s, face, anim, load, work) {
   if (demo) { c.fillStyle = '#6b4a2a'; c.fillRect(-L, -Wd, 2 * L, 2 * Wd); c.strokeStyle = '#3e2814'; c.lineWidth = 0.04 * s; c.strokeRect(-L, -Wd, 2 * L, 2 * Wd); }
   else { hull(); c.fillStyle = fire ? '#4a3020' : '#7b5230'; c.fill(); c.strokeStyle = '#2e1c0c'; c.lineWidth = 0.04 * s; c.stroke();
     c.save(); hull(); c.clip(); c.fillStyle = fire ? '#6b4a32' : '#a87c4f'; c.fillRect(-L, -Wd * 0.7, 2 * L, Wd * 1.4); c.restore(); }
-  if (g) { c.fillStyle = '#9aa1a8'; c.beginPath(); c.moveTo(L + 0.14 * s, 0); c.lineTo(L - 0.02 * s, -0.05 * s); c.lineTo(L - 0.02 * s, 0.05 * s); c.closePath(); c.fill();   // bronze ram
+  if (lb) { // carved dragon prow and round shields along both rails
+    c.strokeStyle = '#5a3d22'; c.lineWidth = 0.07 * s; c.beginPath(); c.moveTo(L * 0.85, 0); c.quadraticCurveTo(L + 0.12 * s, -0.02 * s, L + 0.1 * s, -0.14 * s); c.stroke();
+    circle(c, L + 0.1 * s, -0.15 * s, 0.06 * s, '#6e4a28'); circle(c, L + 0.12 * s, -0.16 * s, 0.015 * s, '#ffcf5a');
+    for (let k = 0; k < 5; k++) for (const sd of [-1, 1]) { circle(c, -L * 0.55 + k * L * 0.27, sd * Wd * 0.92, 0.055 * s, k % 2 ? col.main : '#e8dcc0'); }
+  } else if (g) { c.fillStyle = '#9aa1a8'; c.beginPath(); c.moveTo(L + 0.14 * s, 0); c.lineTo(L - 0.02 * s, -0.05 * s); c.lineTo(L - 0.02 * s, 0.05 * s); c.closePath(); c.fill();   // bronze ram
     for (let k = 0; k < 4; k++) circle(c, -L * 0.5 + k * L * 0.3, 0, 0.05 * s, col.dark); }   // shields of the marines
   if (demo) { for (let k = 0; k < 4; k++) { const bx = -L * 0.6 + (k % 2) * L * 0.6, by = (k < 2 ? -1 : 1) * Wd * 0.45; circle(c, bx, by, 0.1 * s, '#5a3a1a'); circle(c, bx, by, 0.07 * s, '#7b5230'); c.strokeStyle = '#2a1a0a'; c.lineWidth = 0.02 * s; c.beginPath(); c.arc(bx, by, 0.085 * s, 0, TAU); c.stroke(); }
     c.strokeStyle = '#e8d06a'; c.lineWidth = 0.02 * s; c.beginPath(); c.moveTo(L * 0.5, 0); c.quadraticCurveTo(L * 0.8, -0.1 * s, L * 0.95, 0.04 * s); c.stroke();   // fuse
@@ -2278,6 +2462,7 @@ function drawWarship(c, type, col, x, y, s, face, anim, load, work) {
     c.fillStyle = fire ? '#5a2a20' : col.light; c.strokeStyle = col.dark; c.lineWidth = 0.03 * s;
     c.beginPath(); c.moveTo(mx + 0.05 * s, -H); c.quadraticCurveTo(mx + 0.05 * s + bil * 2, 0, mx + 0.05 * s, H); c.lineTo(mx - 0.05 * s, H * 0.94); c.quadraticCurveTo(mx - 0.05 * s + bil * 2, 0, mx - 0.05 * s, -H * 0.94); c.closePath(); c.fill(); c.stroke();
     c.fillStyle = col.main; c.fillRect(mx - 0.02 * s, -H * 0.94, 0.06 * s, H * 1.88);
+    if (lb) { c.fillStyle = '#c0392b'; for (const o of [-0.55, 0.35]) c.fillRect(mx - 0.03 * s, H * o, 0.07 * s, H * 0.2); }   // striped Norse sail
     circle(c, mx, 0, 0.05 * s, '#4a3320'); }
   c.restore();
 }
@@ -3521,7 +3706,8 @@ setReveal(savedReveal);
 const MAP_NOTES = {
   land: 'Open country with a few small ponds. A land war.',
   lakes: 'Big lakes between the towns, full of fish. Docks and Fishing Ships pay off.',
-  coastal: 'A great sea in the middle that every town touches, with rich deep-water fishing.'
+  coastal: 'A great sea in the middle that every town touches, with rich deep-water fishing.',
+  islands: 'Every town on its own island. Rule the sea, then ferry your army across with Transports. Relics and extra gold wait on small islands.'
 };
 function setMapType(m) {
   UI.mapType = MAP_TYPES[m] ? m : 'land';

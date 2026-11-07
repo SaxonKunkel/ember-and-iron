@@ -264,7 +264,10 @@ body.nopanel #msgs{bottom:calc(44px + var(--sb))}
         <div class="seg" id="rivalSeg"><button data-n="1" class="on">1</button><button data-n="2">2</button><button data-n="3">3</button></div>
         <label>Rivals play</label>
         <div class="seg" id="modeSeg"><button data-m="ffa" class="on">Free-for-all</button><button data-m="allied">Allied vs you</button></div>
-        <label>Map</label>
+        <label>Map type</label>
+        <div class="seg" id="mapSeg"><button data-mt="land" class="on">Land</button><button data-mt="lakes">Lakes</button><button data-mt="coastal">Coastal</button></div>
+        <div class="revealnote" id="mapNote"></div>
+        <label>Map visibility</label>
         <div class="seg" id="revealSeg"><button data-r="normal" class="on">Hidden</button><button data-r="explored">Explored</button><button data-r="all">All visible</button></div>
         <div class="revealnote" id="revealNote"></div>
         <label>Map seed</label>
@@ -287,6 +290,7 @@ body.nopanel #msgs{bottom:calc(44px + var(--sb))}
           <li><b>Castle Age:</b> build a <b>Keep</b> (stone) to train your civilization's unique unit and trebuchets, and to research its Veteran upgrade. The <b>Siege Workshop</b> builds rams and mangonels.</li>
           <li><b>Monks</b> (Monastery, Town Age) heal nearby wounded units on their own. Right-click an enemy unit to convert it &mdash; then the monk needs time to regain faith. Right-click a <b>relic</b> to carry it to your Monastery, where it earns gold.</li>
           <li><b>Civilizations:</b> eight real medieval peoples, each with bonuses drawn from what it was known for, a favored army, and a unique unit trained at the Keep. Hover the civ name in the top bar to see yours. Rivals get a random civilization.</li>
+          <li><b>Fishing:</b> villagers can fish shore fish. A <b>Dock</b> (built in the water against the shore) trains <b>Fishing Ships</b>, which also reach deep-water fish further out and build <b>Fish Traps</b> &mdash; endless food on the water. Pick the <b>Lakes</b> or <b>Coastal</b> map type for lots of water.</li>
           <li><b>Walls:</b> pick Stone Wall and drag to draw a line. Place a Gate on one of your walls to let your units through.</li>
           <li><b>Fight:</b> right-click an enemy to attack, or press <kbd>Q</kbd> and click to attack-move. Your Town Center shoots arrows at raiders.</li>
         </ul>
@@ -427,6 +431,9 @@ const UNITS = {
     cost: { food: 55, gold: 60 }, time: 22, hotkey: 'Y', bonus: { cavalry: 12, siege: 6 }, desc: 'Arab unique. Horses panic at the smell of camels: crushes enemy cavalry.' },
   jinete: { name: 'Jinete', civ: 'spanish', look: 'scout', cls: 'cavalry', age: 3, hp: 70, atk: 6, armor: 0, parmor: 2, range: 3, reload: 1.8, speed: 2.8, los: 7, pop: 1,
     cost: { food: 60, gold: 50 }, time: 20, hotkey: 'Y', projectile: true, bonus: { archer: 5, siege: 4 }, desc: 'Spanish unique. Light horseman who hurls javelins; rides down archers and siege.' },
+  // Ships (naval: moves only on water). civilian = never picks fights and isn't part of the army.
+  fishingship: { name: 'Fishing Ship', cls: 'ship', naval: true, civilian: true, age: 1, hp: 60, atk: 0, armor: 0, parmor: 4, range: 0, reload: 2, speed: 2.1, los: 6, pop: 1, carry: 15,
+    builds: ['fishtrap'], cost: { wood: 75 }, time: 20, hotkey: 'F', desc: 'Fishes along shores and in deep water, carrying 15 food at a time to the Dock. Builds Fish Traps.' },
 };
 const BUILDINGS = {
   towncenter: { name: 'Town Center', age: 1, size: 3, hp: 1800, armor: 1, parmor: 6, cost: { wood: 275, stone: 100 }, time: 90, los: 8, pop: 5,
@@ -457,20 +464,33 @@ const BUILDINGS = {
     desc: 'Blocks movement. Click and drag to draw a whole line of wall.' },
   gate: { name: 'Gate', age: 1, size: 1, hp: 900, armor: 4, parmor: 8, cost: { stone: 30 }, time: 20, los: 2, gate: true, hotkey: 'O',
     desc: 'Your units walk through; enemies cannot. Can be placed over one of your walls.' },
+  // naval buildings stand in the water: a Dock must touch the shore, a Fish Trap can go anywhere on open water
+  dock: { name: 'Dock', age: 1, size: 3, hp: 1800, armor: 1, parmor: 6, cost: { wood: 150 }, time: 35, los: 6, naval: true, drop: ['food'], trains: ['fishingship'], hotkey: 'J',
+    desc: 'Built in the water against the shore. Trains ships and takes food from fishing. Villagers can drop food here too.' },
+  fishtrap: { name: 'Fish Trap', age: 1, size: 2, hp: 250, armor: 0, parmor: 0, cost: { wood: 80 }, time: 20, los: 1, naval: true, walkable: true, farm: true, requires: 'dock', hotkey: 'T',
+    desc: 'A farm on the water: endless food for the Fishing Ship that works it. Built by Fishing Ships; requires a Dock.' },
 };
-const BUILD_ORDER = ['house', 'farm', 'mill', 'lumbercamp', 'miningcamp', 'barracks', 'archeryrange', 'stable', 'monastery', 'siegeworkshop', 'watchtower', 'keep', 'wall', 'gate', 'towncenter'];
+const BUILD_ORDER = ['house', 'farm', 'mill', 'lumbercamp', 'miningcamp', 'dock', 'barracks', 'archeryrange', 'stable', 'monastery', 'siegeworkshop', 'watchtower', 'keep', 'wall', 'gate', 'towncenter'];
+UNITS.villager.builds = BUILD_ORDER;
+const canBuildType = (u, type) => !!(UNITS[u.type].builds && UNITS[u.type].builds.includes(type));
+const isNavalB = t => !!BUILDINGS[t].naval;
 const RES_NODES = {
   gold: { name: 'Gold Deposit', res: 'gold', amount: 800 },
   stone: { name: 'Stone Deposit', res: 'stone', amount: 350 },
   berries: { name: 'Berry Bush', res: 'food', amount: 125 },
   sheep: { name: 'Sheep', res: 'food', amount: 100, animal: true, hp: 1 },
   deer: { name: 'Deer', res: 'food', amount: 140, animal: true, hp: 6 },
-  fish: { name: 'Fish', res: 'food', amount: 225 },
+  fish: { name: 'Shore Fish', res: 'food', amount: 225 },
+  deepfish: { name: 'Deep-Water Fish', res: 'food', amount: 400, naval: true },   // only ships can reach it
   relic: { name: 'Relic', res: null, amount: 1 },
 };
-const GATHER_RATE = { wood: 0.6, gold: 0.55, stone: 0.5, berries: 0.75, farm: 0.48, sheep: 0.85, deer: 0.85, fish: 0.6 }; // per second
+// per second. Ships fish at the 'deepfish' rate wherever they fish; 'fishtrap' is the farm on the water.
+const GATHER_RATE = { wood: 0.6, gold: 0.55, stone: 0.5, berries: 0.75, farm: 0.48, sheep: 0.85, deer: 0.85, fish: 0.6, deepfish: 0.75, fishtrap: 0.55 };
 // Food sources villagers look for on their own, with a distance penalty: herd animals first, then deer, berries, fish.
 const FOOD_NODES = { sheep: 0, deer: 2, berries: 3, fish: 5 };
+const SHIP_FOOD_NODES = { fish: 0, deepfish: 0 };
+// Map types chosen before the game. Islands arrives with transport ships.
+const MAP_TYPES = { land: 'Land', lakes: 'Lakes', coastal: 'Coastal' };
 const RELIC_GOLD = 0.5, RELIC_WIN_TIME = 240;   // gold/s per relic; hold every relic this long to win
 // Research: `at` = building that researches it, `age` = minimum age, `fx` = effects (see applyTech).
 const TECHS = {
@@ -495,6 +515,7 @@ const TECHS = {
   herbalism: { name: 'Herbal Lore', at: 'monastery', age: 2, cost: { gold: 100 }, time: 35, icon: 'hp', fx: { heal: 0.6, units: ['monk', { hp: 10 }] }, desc: 'Monks heal 60% faster and gain +10 HP.' },
   engineers: { name: 'Siege Engineers', at: 'siegeworkshop', age: 3, cost: { food: 200, wood: 200 }, time: 45, icon: 'atk', fx: { units: ['siege', { range: 1, atk: 3 }] }, desc: 'Siege +3 attack; mangonels and trebuchets +1 range.' },
   arrowslits: { name: 'Arrow Slits', at: 'watchtower', age: 3, cost: { food: 150, wood: 100 }, time: 40, icon: 'atk', fx: { bld: { atk: 2 } }, desc: 'Watchtowers, Keeps and Town Centers +2 arrow attack.' },
+  gillnets: { name: 'Gillnets', at: 'dock', age: 2, cost: { food: 150, wood: 125 }, time: 40, icon: 'food', fx: { node: [['deepfish', 0.25], ['fishtrap', 0.25]] }, desc: 'Fishing Ships gather 25% faster, from fish and Fish Traps.' },
 };
 const DIFFS = {
   easy:   { label: 'Easy',   barracksAt: 12, age2Vils: 13, age3At: 1e9, towers: 0, monks: 1, trainSpeed: 0.7,  gather: 0.85, maxVils: 16, firstWave: 600, waveEvery: 210, waveBase: 4, waveGrow: 2, barracks: 1, armyCap: 14 },
@@ -656,7 +677,7 @@ function makePlayer(id, isAI) {
 
 /* ============ 4. MAP GENERATION ============ */
 // Point-symmetric map: tile (x,y) mirrors to (W-1-x, H-1-y), so both bases get identical surroundings.
-function genMap(seed) {
+function genMap(seed, mapType = 'land') {
   const rng = mulberry32(seed >>> 0);
   const terrain = new Uint8Array(NT), wood = new Float32Array(NT);
   const noise = cell => {
@@ -678,13 +699,16 @@ function genMap(seed) {
   const fv = new Float32Array(NT), wv = new Float32Array(NT);
   for (let y = 0; y < MAP_H; y++) for (let x = 0; x < MAP_W; x++) { const i = idx(x, y); fv[i] = sym(nA, x, y) * 0.7 + sym(nB, x, y) * 0.3; wv[i] = sym(nW, x, y); }
   const quant = (arr, q) => { const s = Array.from(arr).sort((a, b) => a - b); return s[Math.floor(q * (s.length - 1))]; };
-  const fT = quant(fv, 0.80), wT = quant(wv, 0.955);
+  // water: Land = a few small ponds, Lakes = big lakes between the towns, Coastal = a great sea in the middle
+  const fT = quant(fv, 0.80), wT = quant(wv, mapType === 'lakes' ? 0.79 : 0.955);
+  const C0 = (MAP_W - 1) / 2;
   for (let y = 0; y < MAP_H; y++) for (let x = 0; x < MAP_W; x++) {
     const i = idx(x, y), d = dB(x, y), edge = Math.min(x, y, MAP_W - 1 - x, MAP_H - 1 - y);
     let t = T.GRASS;
     if (d > 13 && fv[i] > fT) t = T.FOREST;
     if (edge < 2 && d > 10 && sym(nE, x, y) > 0.42) t = T.FOREST;
-    if (d > 17 && wv[i] > wT) t = T.WATER;
+    if (mapType === 'coastal') { if (d > 17 && dist(x, y, C0, C0) < 26 + (wv[i] - 0.5) * 14) t = T.WATER; }
+    else if (d > (mapType === 'lakes' ? 15 : 17) && wv[i] > wT) t = T.WATER;
     terrain[i] = t;
   }
   const setT = (x, y, t) => { if (!inB(x, y)) return; for (const [a, b] of rots(x, y)) terrain[idx(a, b)] = t; };
@@ -715,8 +739,8 @@ function genMap(seed) {
   cluster('gold', P(a0 + 1.5, 7.5), 4);
   cluster('stone', P(a0 + 4.4, 8), 3);
   cluster('berries', P(a0 + 5.4, 6), 6);
-  // contested centre gold
-  clearArea(47.5, 47.5, 3.5); cluster('gold', { x: 47, y: 47 }, 1);
+  // contested centre gold (on Coastal maps the middle is open sea)
+  if (mapType !== 'coastal') { clearArea(47.5, 47.5, 3.5); cluster('gold', { x: 47, y: 47 }, 1); }
   // neutral resources scattered in the open
   const scatter = (type, count, n, minD) => {
     let placed = 0, tries = 0;
@@ -753,8 +777,16 @@ function genMap(seed) {
   for (let y = 2; y < MAP_H - 2; y++) for (let x = 2; x < MAP_W - 2; x++) {
     const i = idx(x, y); if (terrain[i] !== T.WATER || taken[i]) continue;
     let shore = false; for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) if (terrain[idx(x + dx, y + dy)] === T.SAND) shore = true;
-    if (!shore || rng() > 0.4 || fishAt.some(f => dist(f[0], f[1], x, y) < 3.2) || fishAt.length >= 32) continue;
+    if (!shore || rng() > 0.4 || fishAt.some(f => dist(f[0], f[1], x, y) < 3.2) || fishAt.length >= (mapType === 'land' ? 32 : 48)) continue;
     for (const [a, b] of rots(x, y)) { taken[idx(a, b)] = 1; fishAt.push([a, b]); nodes.push({ type: 'fish', x: a, y: b }); }
+  }
+  // deep-water fish: open water at least two tiles from any shore, for Fishing Ships only
+  const deepAt = [], openWater = (x, y) => { for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) { const xx = x + dx, yy = y + dy; if (!inB(xx, yy) || terrain[idx(xx, yy)] !== T.WATER) return false; } return true; };
+  for (let y = 3; y < MAP_H - 3; y++) for (let x = 3; x < MAP_W - 3; x++) {
+    const i = idx(x, y); if (taken[i] || !openWater(x, y)) continue;
+    if (rng() > 0.12 || deepAt.some(f => dist(f[0], f[1], x, y) < 5) || fishAt.some(f => dist(f[0], f[1], x, y) < 2.5) || deepAt.length >= 64) continue;
+    const rs = rots(x, y); if (rs.some(([a, b]) => taken[idx(a, b)])) continue;
+    for (const [a, b] of rs) { taken[idx(a, b)] = 1; deepAt.push([a, b]); nodes.push({ type: 'deepfish', x: a, y: b }); }
   }
   // connectivity: make sure the bases can reach each other; drop unreachable resource nodes
   const walk = i => (terrain[i] === T.GRASS || terrain[i] === T.SAND) && !taken[i];
@@ -777,7 +809,8 @@ function genMap(seed) {
     let placed = false;
     for (const x of [16, 15, 17, 14, 18, 13, 19]) { const i = idx(x, y); if (seen[i] && !taken[i] && !animTaken.has(i) && addNode('relic', x, y)) { placed = true; break; } }
     if (placed) break; }
-  const reachable = nodes.filter(n => { for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const xx = n.x + dx, yy = n.y + dy; if (inB(xx, yy) && seen[idx(xx, yy)]) return true; } return false; });
+  const reachable = nodes.filter(n => { if (n.type === 'fish' || n.type === 'deepfish') return true;   // ships reach any water
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const xx = n.x + dx, yy = n.y + dy; if (inB(xx, yy) && seen[idx(xx, yy)]) return true; } return false; });
   for (let i = 0; i < NT; i++) if (terrain[i] === T.FOREST) wood[i] = TREE_WOOD;
   return { terrain, wood, nodes: reachable, bases: B };
 }
@@ -785,16 +818,22 @@ function genMap(seed) {
 /* ============ 5. MAP QUERIES ============ */
 // PASS = owner of the unit currently moving or pathing (-1 = nobody). Finished gates are open only to their owner's team.
 let PASS = -1;
+// NAVAL = 1 while a ship is moving or pathing: then only open water counts as walkable (M.wsolid instead of M.solid)
+let NAVAL = 0;
+function setNav(u) { PASS = u ? u.owner : -1; NAVAL = u && UNITS[u.type].naval ? 1 : 0; }
 function refreshSolid(i) {
-  const t = M.terrain[i]; let s = (t === T.WATER || t === T.FOREST) ? 1 : 0, gate = 0;
+  const t = M.terrain[i]; let s = (t === T.WATER || t === T.FOREST) ? 1 : 0, ws = t === T.WATER ? 0 : 1, gate = 0;
   const o = M.occ[i];
   if (o) { const e = W.byId.get(o); if (e && !e.dead) { const d = e.kind === 'building' ? BUILDINGS[e.type] : null;
-    if (d && d.gate && e.built) gate = e.owner + 1; else if (!(d && d.walkable)) s = 1; } }
-  M.solid[i] = s; M.gate[i] = gate;
+    if (d && d.gate && e.built) gate = e.owner + 1; else if (!(d && d.walkable)) s = 1;
+    if (!(d && d.walkable)) ws = 1; } }
+  M.solid[i] = s; M.gate[i] = gate; M.wsolid[i] = ws;
 }
 function isWalk(tx, ty) {
   if (tx < 0 || ty < 0 || tx >= MAP_W || ty >= MAP_H) return false;
-  const i = ty * MAP_W + tx; if (M.solid[i]) return false;
+  const i = ty * MAP_W + tx;
+  if (NAVAL) return !M.wsolid[i];
+  if (M.solid[i]) return false;
   const g = M.gate[i]; return !g || (PASS >= 0 && G.players[g - 1].team === G.players[PASS].team);
 }
 function walkAt(x, y) { return isWalk(Math.floor(x), Math.floor(y)); }
@@ -811,8 +850,23 @@ function tileRect(e) { return e.kind === 'building' ? [e.x, e.y, e.x + e.w - 1, 
 function distToRect(px, py, r) { const dx = Math.max(r[0] - px, 0, px - r[2]), dy = Math.max(r[1] - py, 0, py - r[3]); return Math.hypot(dx, dy); }
 const ecx = e => e.kind === 'unit' ? e.x : e.cx, ecy = e => e.kind === 'unit' ? e.y : e.cy;
 function isEnemy(a, b) { return a >= 0 && b >= 0 && a !== b && G.players[a].team !== G.players[b].team; }
+const isLand = i => M.terrain[i] === T.GRASS || M.terrain[i] === T.SAND;
+// can tile (x,y) take part of a building of this type? (used by canPlace and the placement ghost)
+function placeTileOk(type, x, y, needExplored) {
+  if (!inB(x, y)) return false; const i = idx(x, y);
+  if (needExplored && !G.explored[i]) return false;
+  if (BUILDINGS[type].naval) return M.terrain[i] === T.WATER && !M.occ[i];
+  return isLand(i) && !M.occ[i];
+}
 function canPlace(type, tx, ty, needExplored) {
   const s = BUILDINGS[type].size;
+  if (BUILDINGS[type].naval) {
+    for (let y = ty; y < ty + s; y++) for (let x = tx; x < tx + s; x++) if (!placeTileOk(type, x, y, needExplored)) return false;
+    if (type !== 'dock') return true;
+    // a Dock must touch the shore so villagers can build it and drop off food
+    for (let k = 0; k < s; k++) for (const [x, y] of [[tx + k, ty - 1], [tx + k, ty + s], [tx - 1, ty + k], [tx + s, ty + k]]) if (inB(x, y) && isLand(idx(x, y))) return true;
+    return false;
+  }
   for (let y = ty; y < ty + s; y++) for (let x = tx; x < tx + s; x++) {
     if (!inB(x, y)) return false; const i = idx(x, y), t = M.terrain[i];
     if (t !== T.GRASS && t !== T.SAND) return false;
@@ -890,7 +944,7 @@ function stopPath(u) { u.path = null; u.wantPath = false; }
 function resetNav(u) { u.goalKey = null; u.fails = 0; stopPath(u); }
 function processPaths() {
   let budget = 24;
-  while (budget > 0 && W.pathQ.length) { const u = E(W.pathQ.shift()); if (!u || u.dead || !u.wantPath) continue; PASS = u.owner; computePath(u); PASS = -1; budget--; }
+  while (budget > 0 && W.pathQ.length) { const u = E(W.pathQ.shift()); if (!u || u.dead || !u.wantPath) continue; setNav(u); computePath(u); setNav(null); budget--; }
 }
 function computePath(u) {
   u.wantPath = false; const g = u.goal; if (!g) return;
@@ -984,7 +1038,7 @@ function cancelQueue(b, i) {
 }
 // unit stat including upgrades
 function ust(owner, type, k) { const m = G.players[owner].mods.unit[type]; return UNITS[type][k] + ((m && m[k]) || 0); }
-function carryCap(u) { return CARRY_CAP + G.players[u.owner].mods.carry; }
+function carryCap(u) { return UNITS[u.type].carry || CARRY_CAP + G.players[u.owner].mods.carry; }
 function techQueued(p, id) { return W.buildings.some(b => b.owner === p.id && !b.dead && b.queue.includes('t:' + id)); }
 function techAvailable(p, id) { const t = TECHS[id]; return !p.techs[id] && (!t.civ || t.civ === p.civ) && p.age >= t.age && (t.maxAge == null || p.age <= t.maxAge) && !techQueued(p, id); }
 function queueTech(b, id) {
@@ -1016,6 +1070,7 @@ function applyTech(p, id) {
     if (m.hp) for (const u of W.units) if (u.owner === p.id && u.type === t) { u.maxHp += m.hp; u.hp += m.hp; }
   }
   if (fx.gather) for (const [r, v] of fx.gather) p.mods.gather[r] += v;
+  if (fx.node) for (const [k, v] of fx.node) p.mods.node[k] = (p.mods.node[k] || 1) + v;
   if (fx.bld) for (const k in fx.bld) p.mods.bld[k] = (p.mods.bld[k] || 0) + fx.bld[k];
   if (fx.units) {
     const [cls, m] = fx.units;
@@ -1027,21 +1082,25 @@ function applyTech(p, id) {
   }
 }
 function farmerActive(f) { if (!f.farmer) return false; const u = E(f.farmer); return !!(u && !u.dead && u.task && u.task.type === 'gather' && u.task.node === f.id); }
-function nearestDrop(owner, res, x, y) {
+// naval = a ship asking: only Docks take its catch
+function nearestDrop(owner, res, x, y, naval) {
   let best = null, bd = 1e9;
-  for (const b of W.buildings) { if (b.owner !== owner || !b.built || b.dead) continue; const d = BUILDINGS[b.type]; if (!d.drop || !d.drop.includes(res)) continue;
+  for (const b of W.buildings) { if (b.owner !== owner || !b.built || b.dead) continue; const d = BUILDINGS[b.type]; if (!d.drop || !d.drop.includes(res) || (naval && !d.naval)) continue;
     const dd = distToRect(x, y, rectOf(b)); if (dd < bd) { bd = dd; best = b; } }
   return best;
 }
 // Find something to gather of resource `res` near (x,y). Returns an entity or {tree:i}.
-function findGatherTarget(owner, res, x, y, maxR, excludeFarm) {
+// naval = for a Fishing Ship: Fish Traps and fish only; otherwise land farms and everything villagers can reach.
+function findGatherTarget(owner, res, x, y, maxR, excludeFarm, naval) {
+  if (naval && res !== 'food') return null;
   if (res === 'wood') { const t = findTree(x, y, maxR); return t >= 0 ? { tree: t } : null; }
   let best = null, bd = maxR;
-  if (res === 'food') for (const b of W.buildings) if (b.owner === owner && b.built && BUILDINGS[b.type].farm && b.id !== excludeFarm && !farmerActive(b)) { const d = dist(x, y, b.cx, b.cy); if (d < bd) { bd = d; best = b; } }
+  if (res === 'food') for (const b of W.buildings) if (b.owner === owner && b.built && BUILDINGS[b.type].farm && !!BUILDINGS[b.type].naval === !!naval && b.id !== excludeFarm && !farmerActive(b)) { const d = dist(x, y, b.cx, b.cy); if (d < bd) { bd = d; best = b; } }
   if (best) return best;
   if (res === 'food') {
+    const table = naval ? SHIP_FOOD_NODES : FOOD_NODES;
     for (const n of W.nodes) {
-      const pen = FOOD_NODES[n.type]; if (pen === undefined || n.dead) continue;
+      const pen = table[n.type]; if (pen === undefined || n.dead) continue;
       if (n.type === 'sheep' && n.hp > 0 && n.herd >= 0 && n.herd !== owner) continue;   // someone else's flock
       const d = dist(x, y, n.cx, n.cy) + pen; if (d < bd) { bd = d; best = n; }
     }
@@ -1063,7 +1122,8 @@ function applyRally(u, b) {
   const r = b.rally; if (!r) return;
   if (r.tree >= 0 && u.type === 'villager' && exposedTree(r.tree)) { orderGather(u, { tree: r.tree }); return; }
   if (r.id) { const e = E(r.id); if (e && !e.dead) {
-    if (u.type === 'villager' && (isGatherable(e) || (e.kind === 'building' && e.owner === u.owner && BUILDINGS[e.type].farm && !farmerActive(e)))) { orderGather(u, e); return; }
+    if (u.type === 'villager' && ((isGatherable(e) && !RES_NODES[e.type].naval) || (e.kind === 'building' && e.owner === u.owner && BUILDINGS[e.type].farm && !BUILDINGS[e.type].naval && !farmerActive(e)))) { orderGather(u, e); return; }
+    if (u.type === 'fishingship' && ((e.kind === 'res' && SHIP_FOOD_NODES[e.type] !== undefined) || (e.kind === 'building' && e.owner === u.owner && e.type === 'fishtrap' && !farmerActive(e)))) { orderGather(u, e); return; }
     if (isEnemy(u.owner, e.owner)) { orderAttack(u, e); return; } } }
   orderMove(u, r.x, r.y);
 }
@@ -1073,10 +1133,10 @@ function step() {
   G.tick++; G.time += SIM_DT; const dt = SIM_DT;
   rebuildLists();
   processPaths();
-  for (const u of W.units) { u.px = u.x; u.py = u.y; PASS = u.owner; updateUnit(u, dt); }
-  PASS = -1;
+  for (const u of W.units) { u.px = u.x; u.py = u.y; setNav(u); updateUnit(u, dt); }
+  setNav(null);
   separate();
-  if (G.tick % 10 === 0) { for (const u of W.units) { PASS = u.owner; unstick(u); } PASS = -1; }
+  if (G.tick % 10 === 0) { for (const u of W.units) { setNav(u); unstick(u); } setNav(null); }
   for (const b of W.buildings) updateBuilding(b, dt);
   updateAnimals();
   updateProjectiles(dt);
@@ -1111,7 +1171,7 @@ function updateUnit(u, dt) {
   const t = u.task;
   if (!t) {
     if (d.cls === 'monk') { if ((G.tick + u.id) % 10 === 0) autoHeal(u); }
-    else if (d.cls !== 'villager' && (G.tick + u.id) % 10 === 0) { const e = acquire(u); if (e) { u.task = { type: 'attack', target: e.id, leash: { x: u.x, y: u.y } }; resetNav(u); } }
+    else if (d.cls !== 'villager' && !d.civilian && (G.tick + u.id) % 10 === 0) { const e = acquire(u); if (e) { u.task = { type: 'attack', target: e.id, leash: { x: u.x, y: u.y } }; resetNav(u); } }
   } else switch (t.type) {
     case 'move': taskMove(u, t); break;
     case 'attack': taskAttack(u, t); break;
@@ -1169,13 +1229,13 @@ function deposit(u) {
   u.carry = 0;
 }
 function taskGather(u, t, dt) {
-  const p = G.players[u.owner];
+  const p = G.players[u.owner], naval = !!UNITS[u.type].naval;
   let tgt = null, alive;
   if (t.tree >= 0) alive = M.terrain[t.tree] === T.FOREST && M.wood[t.tree] > 0;
   else { tgt = E(t.node); alive = !!tgt && !tgt.dead && (tgt.kind === 'res' || (tgt.built && tgt.owner === u.owner && (!farmerActive(tgt) || tgt.farmer === u.id))); }
   // carrying a full load (or finishing up): go home
   if (u.carry >= carryCap(u) || (t.done && u.carry > 0)) {
-    const d = nearestDrop(u.owner, u.carryType, u.x, u.y);
+    const d = nearestDrop(u.owner, u.carryType, u.x, u.y, naval);
     if (!d) { stopPath(u); return; } // wait until a drop-off exists
     if (distToRect(u.x, u.y, rectOf(d)) <= 0.85) { stopPath(u); deposit(u); u.goalKey = null; if (t.done) u.task = null; return; }
     approach(u, 'd' + d.id, () => ({ rect: tileRect(d) }));
@@ -1184,7 +1244,7 @@ function taskGather(u, t, dt) {
   }
   if (t.done) { u.task = null; return; }
   if (!alive) {
-    const nt = findGatherTarget(u.owner, t.res, t.lx, t.ly, 10, t.node);
+    const nt = findGatherTarget(u.owner, t.res, t.lx, t.ly, naval ? 16 : 10, t.node, naval);
     if (nt) { const carry = u.carry, ct = u.carryType; orderGather(u, nt); u.carry = carry; u.carryType = ct; return; }
     if (u.carry > 0) { t.done = true; return; }
     u.task = null; return;
@@ -1207,7 +1267,8 @@ function taskGather(u, t, dt) {
     }
     if (isFarm) tgt.farmer = u.id;
     if (u.carryType !== t.res) { u.carry = 0; u.carryType = t.res; }
-    const key = t.tree >= 0 ? 'wood' : isFarm ? 'farm' : tgt.type;
+    // ships fish at the deep-water rate wherever they fish; a Fish Trap is the farm of the sea
+    const key = t.tree >= 0 ? 'wood' : isFarm ? (BUILDINGS[tgt.type].naval ? 'fishtrap' : 'farm') : naval ? 'deepfish' : tgt.type;
     let amt = GATHER_RATE[key] * p.mods.gather[t.res] * (p.mods.node[key] || 1) * dt;
     if (t.tree >= 0) { amt = Math.min(amt, M.wood[t.tree]); M.wood[t.tree] -= amt; if (M.wood[t.tree] <= 0.001) removeTree(t.tree); }
     else if (!isFarm) { amt = Math.min(amt, tgt.amount); tgt.amount -= amt; if (tgt.amount <= 0.001) depleteNode(tgt); }
@@ -1220,7 +1281,7 @@ function taskGather(u, t, dt) {
   else approach(u, key, () => isFarm ? { x: tgt.cx, y: tgt.cy } : { rect: t.tree >= 0 ? [t.tree % MAP_W, (t.tree / MAP_W) | 0, t.tree % MAP_W, (t.tree / MAP_W) | 0] : tileRect(tgt) });
   if (u.fails > 4) {
     // unreachable: try a different target once, else give up
-    const nt = t.retried ? null : findGatherTarget(u.owner, t.res, u.x, u.y, 12, t.node);
+    const nt = t.retried ? null : findGatherTarget(u.owner, t.res, u.x, u.y, 12, t.node, naval);
     if (nt && !(nt.tree !== undefined && nt.tree === t.tree)) { orderGather(u, nt); u.task.retried = true; }
     else { u.task = null; resetNav(u); }
   }
@@ -1248,7 +1309,7 @@ function claimSheep(n) {
   if (n.herd < 0 || (!ownerNear && isEnemy(claimer, n.herd))) n.herd = claimer;   // finders keepers; unguarded flocks can be stolen
 }
 function updateAnimals() {
-  PASS = -1; let pathBudget = 2;
+  setNav(null); let pathBudget = 2;
   for (const n of W.nodes) {
     if (!n.animal || n.dead || n.hp <= 0) continue;
     if (n.type === 'sheep') {
@@ -1377,22 +1438,24 @@ function afterBuild(u, b, prev) {
   if (d.farm) { if (!farmerActive(b) || b.farmer === u.id) { orderGather(u, b); return; } }
   if (d.drop && b.type !== 'towncenter') {
     let best = null, bd = 1e9;
-    for (const r of d.drop) { const g = findGatherTarget(u.owner, r, b.cx, b.cy, 10); if (!g) continue; const gx = g.tree !== undefined ? g.tree % MAP_W : g.cx, gy = g.tree !== undefined ? (g.tree / MAP_W) | 0 : g.cy; const dd = dist(gx, gy, b.cx, b.cy); if (dd < bd) { bd = dd; best = g; } }
+    for (const r of d.drop) { const g = findGatherTarget(u.owner, r, b.cx, b.cy, 10, 0, !!UNITS[u.type].naval); if (!g) continue; const gx = g.tree !== undefined ? g.tree % MAP_W : g.cx, gy = g.tree !== undefined ? (g.tree / MAP_W) | 0 : g.cy; const dd = dist(gx, gy, b.cx, b.cy); if (dd < bd) { bd = dd; best = g; } }
     if (best) { orderGather(u, best); return; }
   }
   let nb = null, nd = 12;
-  for (const o of W.buildings) if (o.owner === u.owner && !o.built && !o.dead && !BUILDINGS[o.type].farm) { const dd = dist(o.cx, o.cy, u.x, u.y); if (dd < nd) { nd = dd; nb = o; } }
+  for (const o of W.buildings) if (o.owner === u.owner && !o.built && !o.dead && !BUILDINGS[o.type].farm && canBuildType(u, o.type)) { const dd = dist(o.cx, o.cy, u.x, u.y); if (dd < nd) { nd = dd; nb = o; } }
   if (nb) { orderBuild(u, nb); if (u.task) u.task.prev = prev; return; }
   if (prev) { u.task = prev; resetNav(u); }
 }
 function separate() {
-  const MIN = 0.52;
   for (const u of W.units) {
     if (u.dead) continue;
+    const un = !!UNITS[u.type].naval;
     const gx = clamp(Math.floor(u.x / GC), 0, GW - 1), gy = clamp(Math.floor(u.y / GC), 0, GW - 1);
     for (let yy = Math.max(0, gy - 1); yy <= Math.min(GW - 1, gy + 1); yy++) for (let xx = Math.max(0, gx - 1); xx <= Math.min(GW - 1, gx + 1); xx++) {
       for (const v of W.grid[yy * GW + xx]) {
         if (v.id <= u.id || v.dead || u.ghost > G.tick || v.ghost > G.tick) continue;
+        if (un !== !!UNITS[v.type].naval) continue;   // ships and land units never shove each other
+        const MIN = un ? 0.85 : 0.52;
         let dx = v.x - u.x, dy = v.y - u.y; const d2 = dx * dx + dy * dy;
         if (d2 >= MIN * MIN) continue;
         let d = Math.sqrt(d2);
@@ -1414,9 +1477,9 @@ function separate() {
 }
 function nudge(u, dx, dy) {
   const nx = clamp(u.x + dx, 0.05, MAP_W - 0.05), ny = clamp(u.y + dy, 0.05, MAP_H - 0.05);
-  PASS = u.owner;
+  setNav(u);
   if (walkAt(nx, ny)) { u.x = nx; u.y = ny; } else if (walkAt(nx, u.y)) u.x = nx; else if (walkAt(u.x, ny)) u.y = ny;
-  PASS = -1;
+  setNav(null);
 }
 function unstick(u) {
   if (walkAt(u.x, u.y)) return;
@@ -1438,8 +1501,10 @@ function updateBuilding(b, dt) {
     if (p.pop + ud.pop <= p.popCap) {
       b.stalled = false; b.trainT += dt * p.mods.trainSpeed * (p.mods.trainAt[b.type] || 1);
       if (b.trainT >= ud.time) {
+        NAVAL = ud.naval ? 1 : 0;   // ships come out on the water side
         const r = b.rally, sp = findSpawn(b, r ? r.x : b.cx + 0.5, r ? r.y : b.y + b.h + 1);
-        if (sp) { const u = spawnUnit(type, b.owner, sp[0], sp[1]); b.queue.shift(); b.trainT = 0; p.pop += ud.pop; p.stats[type === 'villager' ? 'vils' : 'mil']++; applyRally(u, b); if (b.owner === HUMAN) Sfx.play('trained'); }
+        NAVAL = 0;
+        if (sp) { const u = spawnUnit(type, b.owner, sp[0], sp[1]); b.queue.shift(); b.trainT = 0; p.pop += ud.pop; p.stats[type === 'villager' || ud.civilian ? 'vils' : 'mil']++; applyRally(u, b); if (b.owner === HUMAN) Sfx.play('trained'); }
       }
     } else b.stalled = true;
   }
@@ -1562,7 +1627,7 @@ function applyDamage(e, dmg, src, srcOwner) {
   for (const ai of G.ai) if (ai.pid === e.owner && src && !src.dead) ai.alert = { x: ecx(src), y: ecy(src), t: G.time };
   if (e.hp <= 0) { kill(e, srcOwner); return; }
   const cls = e.kind === 'unit' ? UNITS[e.type].cls : '';
-  if (e.kind === 'unit' && src && !src.dead && src.kind === 'unit' && !e.task && cls !== 'villager' && cls !== 'monk' && !(UNITS[e.type].bldOnly && src.kind === 'unit')) { e.task = { type: 'attack', target: src.id, leash: { x: e.x, y: e.y } }; resetNav(e); }
+  if (e.kind === 'unit' && src && !src.dead && src.kind === 'unit' && !e.task && cls !== 'villager' && cls !== 'monk' && !UNITS[e.type].civilian && !(UNITS[e.type].bldOnly && src.kind === 'unit')) { e.task = { type: 'attack', target: src.id, leash: { x: e.x, y: e.y } }; resetNav(e); }
 }
 function kill(e, killerOwner) {
   e.dead = true; e.deathT = 0; e.hp = 0;
@@ -1587,8 +1652,8 @@ function aiShares(hasBarracks) { return hasBarracks ? { food: 0.41, wood: 0.35, 
 function aiThink(ai) {
   const pid = ai.pid, p = G.players[pid]; if (p.defeated) return;
   const D = DIFFS[ai.diff];
-  const vils = [], army = [], monks = [];
-  for (const u of W.units) if (u.owner === pid && !u.dead) (u.type === 'villager' ? vils : u.type === 'monk' ? monks : army).push(u);
+  const vils = [], army = [], monks = [], ships = [];
+  for (const u of W.units) if (u.owner === pid && !u.dead) (u.type === 'villager' ? vils : u.type === 'monk' ? monks : UNITS[u.type].naval ? ships : army).push(u);
   const blds = W.buildings.filter(b => b.owner === pid && !b.dead);
   const of = t => blds.filter(b => b.type === t);
   const tcs = of('towncenter'), tc = tcs.find(b => b.built) || tcs[0];
@@ -1936,6 +2001,7 @@ function drawUnit(c, type, col, x, y, s, face, anim, carry, carryType, work) {
   const r = 0.3 * s, fx = Math.cos(face), fy = Math.sin(face), sx = -fy, sy = fx;
   c.fillStyle = 'rgba(0,0,0,.28)'; c.beginPath(); c.ellipse(x + 0.05 * s, y + 0.12 * s, r * 1.05, r * 0.72, 0, 0, TAU); c.fill();
   c.lineCap = 'round';
+  if (ud && ud.naval) { drawShip(c, type, col, x, y, s, face, anim, carry, work); return; }
   if (type === 'scout' || type === 'knight' || type === 'camel') { drawRider(c, type, col, x, y, s, face, anim, work); return; }
   if (type === 'ram') { drawRam(c, col, x, y, s, face, anim, work); return; }
   if (type === 'mangonel' || type === 'trebuchet') { drawEngine(c, type, col, x, y, s, face, anim, work); return; }
@@ -2071,6 +2137,32 @@ function drawRider(c, type, col, x, y, s, face, anim, work) {
     c.strokeStyle = '#d7dde3'; c.lineWidth = 0.05 * s; c.beginPath(); c.moveTo(hx, hy); c.lineTo(hx + fx * (0.32 * s + th), hy + fy * (0.32 * s + th)); c.stroke();
   }
 }
+// Ships, seen from above: a planked hull pointing along `face`, a mast and a sail in the owner's colour.
+function drawShip(c, type, col, x, y, s, face, anim, carry, work) {
+  const L = 0.62 * s, Wd = 0.24 * s, bob = Math.sin(anim * 2.2) * 0.02 * s;
+  c.save(); c.translate(x, y + bob); c.rotate(face);
+  // wake and shadow
+  c.fillStyle = 'rgba(220,240,255,.28)'; c.beginPath(); c.ellipse(-L * 0.9, 0, L * 0.45, Wd * 0.9, 0, 0, TAU); c.fill();
+  c.fillStyle = 'rgba(0,0,0,.25)'; c.beginPath(); c.ellipse(0.04 * s, 0.07 * s, L, Wd * 1.05, 0, 0, TAU); c.fill();
+  // hull
+  const hull = () => { c.beginPath(); c.moveTo(L, 0); c.quadraticCurveTo(L * 0.45, -Wd * 1.25, -L * 0.75, -Wd); c.lineTo(-L * 0.85, 0); c.lineTo(-L * 0.75, Wd); c.quadraticCurveTo(L * 0.45, Wd * 1.25, L, 0); c.closePath(); };
+  hull(); c.fillStyle = '#7b5230'; c.fill(); c.strokeStyle = '#3e2814'; c.lineWidth = 0.04 * s; c.stroke();
+  c.save(); hull(); c.clip(); c.fillStyle = '#a87c4f'; c.fillRect(-L, -Wd * 0.7, 2 * L, Wd * 1.4);
+  c.strokeStyle = 'rgba(60,40,20,.45)'; c.lineWidth = 0.02 * s; c.beginPath(); for (const k of [-0.35, 0, 0.35]) { c.moveTo(-L, k * Wd); c.lineTo(L, k * Wd); } c.stroke(); c.restore();
+  c.fillStyle = col.main; c.fillRect(-L * 0.8, -0.03 * s, 0.1 * s, 0.06 * s);   // painted stern
+  // catch in the hold
+  if (carry > 0) for (let k = 0; k < Math.min(4, Math.ceil(carry / 4)); k++) { c.fillStyle = '#9fb7c6'; c.beginPath(); c.ellipse(-L * 0.35 + k * 0.1 * s, (k % 2 ? 1 : -1) * 0.05 * s, 0.07 * s, 0.03 * s, 0, 0, TAU); c.fill(); }
+  // net over the side while fishing
+  if (work) { const sw = Math.sin(anim * 3) * 0.04 * s; c.strokeStyle = 'rgba(235,225,200,.8)'; c.lineWidth = 0.015 * s; c.beginPath();
+    for (let k = 0; k < 4; k++) { c.moveTo(L * 0.1 + k * 0.08 * s, Wd); c.lineTo(L * 0.05 + k * 0.08 * s + sw, Wd + 0.2 * s); } c.moveTo(L * 0.05, Wd + 0.1 * s); c.lineTo(L * 0.4, Wd + 0.1 * s + sw); c.stroke(); }
+  // mast and square sail, billowing a little
+  const bil = 0.05 * s + Math.sin(anim * 1.7) * 0.015 * s;
+  c.fillStyle = col.light; c.strokeStyle = col.dark; c.lineWidth = 0.03 * s;
+  c.beginPath(); c.moveTo(0.05 * s, -Wd * 1.6); c.quadraticCurveTo(0.05 * s + bil * 2, 0, 0.05 * s, Wd * 1.6); c.lineTo(-0.05 * s, Wd * 1.5); c.quadraticCurveTo(-0.05 * s + bil * 2, 0, -0.05 * s, -Wd * 1.5); c.closePath(); c.fill(); c.stroke();
+  c.fillStyle = col.main; c.fillRect(-0.02 * s, -Wd * 1.5, 0.06 * s, Wd * 3);
+  circle(c, 0, 0, 0.05 * s, '#4a3320');
+  c.restore();
+}
 function drawRam(c, col, x, y, s, face, anim, work) {
   c.save(); c.translate(x, y); c.rotate(face);
   const L = 0.55 * s, Wd = 0.34 * s, th = work ? Math.max(0, Math.sin(anim * 2.5)) * 0.18 * s : 0;
@@ -2125,8 +2217,34 @@ function drawBuilding(c, type, col, x, y, s, b, now) {
   const d = BUILDINGS[type], n = d.size, full = n * s, ins = 0.08 * s, X = x + ins, Y = y + ins, w = full - 2 * ins;
   const built = !b || b.built, prog = b ? b.progress : 1;
   if (!built) { c.fillStyle = 'rgba(90,70,45,.7)'; c.fillRect(X, Y, w, w); c.globalAlpha *= 0.35 + 0.65 * prog; }
-  if (!d.farm && !d.wall && !d.gate && type !== 'watchtower') { c.fillStyle = 'rgba(0,0,0,.25)'; c.fillRect(X + 0.14 * s, Y + 0.16 * s, w, w); }
+  if (!d.farm && !d.wall && !d.gate && type !== 'watchtower' && type !== 'dock') { c.fillStyle = 'rgba(0,0,0,.25)'; c.fillRect(X + 0.14 * s, Y + 0.16 * s, w, w); }
   switch (type) {
+    case 'dock': {
+      // a plank pier on stilts with a boat shed and a crane
+      c.fillStyle = 'rgba(0,0,0,.22)'; c.fillRect(X + 0.1 * s, Y + 0.14 * s, w, w);
+      c.fillStyle = '#5a3d22'; for (const [ox, oy] of [[0.04, 0.04], [0.96, 0.04], [0.04, 0.96], [0.96, 0.96], [0.5, 0.96], [0.5, 0.04]]) circle(c, X + w * ox, Y + w * oy, 0.1 * s, '#4a3320');
+      c.fillStyle = '#a07a4a'; c.fillRect(X, Y + w * 0.08, w, w * 0.84);
+      c.strokeStyle = 'rgba(70,45,20,.55)'; c.lineWidth = 0.025 * s; c.beginPath(); for (let k = 1; k < 9; k++) { c.moveTo(X + w * k / 9, Y + w * 0.08); c.lineTo(X + w * k / 9, Y + w * 0.92); } c.stroke();
+      c.strokeStyle = '#5a3d22'; c.lineWidth = 0.05 * s; c.strokeRect(X, Y + w * 0.08, w, w * 0.84);
+      gable(c, X + w * 0.08, Y + w * 0.14, w * 0.5, w * 0.42, col, false);   // boat shed
+      c.fillStyle = '#6e4a28'; c.fillRect(X + w * 0.68, Y + w * 0.2, 0.1 * s, w * 0.6);   // crane post
+      c.strokeStyle = '#6e4a28'; c.lineWidth = 0.06 * s; c.beginPath(); c.moveTo(X + w * 0.72, Y + w * 0.24); c.lineTo(X + w * 0.95, Y + w * 0.5); c.stroke();
+      c.strokeStyle = '#c9b48a'; c.lineWidth = 0.02 * s; c.beginPath(); c.moveTo(X + w * 0.95, Y + w * 0.5); c.lineTo(X + w * 0.95, Y + w * 0.66); c.stroke();
+      for (let k = 0; k < 3; k++) { c.fillStyle = k % 2 ? '#8a6a40' : '#7b5230'; c.fillRect(X + w * (0.12 + k * 0.14), Y + w * 0.66, w * 0.11, w * 0.16); }   // barrels of fish
+      c.fillStyle = col.main; c.fillRect(X + w * 0.3, Y - 0.06 * s, 0.4 * s, 0.22 * s);
+      break;
+    }
+    case 'fishtrap': {
+      // a ring of stakes holding a net, with floats in the owner's colour
+      const cx = X + w / 2, cy = Y + w / 2, R = w * 0.44;
+      c.fillStyle = 'rgba(40,90,130,.35)'; c.beginPath(); c.arc(cx, cy, R, 0, TAU); c.fill();
+      c.strokeStyle = 'rgba(230,220,195,.55)'; c.lineWidth = 0.02 * s; c.beginPath();
+      for (let k = -3; k <= 3; k++) { const o = k / 3.5 * R, h = Math.sqrt(Math.max(0, R * R - o * o)); c.moveTo(cx + o, cy - h); c.lineTo(cx + o, cy + h); c.moveTo(cx - h, cy + o); c.lineTo(cx + h, cy + o); } c.stroke();
+      for (let k = 0; k < 12; k++) { const a = k / 12 * TAU; circle(c, cx + Math.cos(a) * R, cy + Math.sin(a) * R, 0.07 * s, '#6e4a28'); }
+      for (let k = 0; k < 4; k++) { const a = k / 4 * TAU + 0.4; circle(c, cx + Math.cos(a) * R * 0.8, cy + Math.sin(a) * R * 0.8, 0.06 * s, col.main); }
+      if (built && b && farmerActive(b)) { const t = now * 2 + b.id; for (let k = 0; k < 2; k++) { const a = t + k * 3; c.save(); c.translate(cx + Math.cos(a) * R * 0.4, cy + Math.sin(a) * R * 0.3); c.rotate(a + 1.6); c.fillStyle = '#5d7f96'; c.beginPath(); c.ellipse(0, 0, 0.1 * s, 0.04 * s, 0, 0, TAU); c.fill(); c.restore(); } }
+      break;
+    }
     case 'towncenter': {
       c.fillStyle = '#8e8577'; rr(c, X, Y, w, w, 0.15 * s); c.fill(); c.strokeStyle = '#5d564c'; c.lineWidth = 0.06 * s; c.stroke();
       c.fillStyle = '#b6a98f'; c.fillRect(X + w * 0.12, Y + w * 0.12, w * 0.76, w * 0.76);
@@ -2304,12 +2422,13 @@ function drawNode(c, type, x, y, s, ratio, seed, n) {
     }
     c.restore(); return;
   }
-  if (type === 'fish') {
-    const t = performance.now() / 1000 + seed * 10;
-    c.strokeStyle = 'rgba(200,235,255,.45)'; c.lineWidth = 1; c.beginPath(); c.ellipse(cx, cy, s * 0.36, s * 0.22, 0, 0, TAU); c.stroke();
-    const nf = Math.max(1, Math.ceil(3 * ratio));
-    for (let i = 0; i < nf; i++) { const a = t * 0.6 + i * 2.1, fx = cx + Math.cos(a) * s * 0.2, fy = cy + Math.sin(a) * s * 0.12;
-      c.save(); c.translate(fx, fy); c.rotate(a + Math.PI / 2); c.fillStyle = '#5d7f96'; c.beginPath(); c.ellipse(0, 0, s * 0.11, s * 0.045, 0, 0, TAU); c.fill();
+  if (type === 'fish' || type === 'deepfish') {
+    const t = performance.now() / 1000 + seed * 10, deep = type === 'deepfish', sz = deep ? 1.35 : 1;
+    c.strokeStyle = deep ? 'rgba(170,215,255,.5)' : 'rgba(200,235,255,.45)'; c.lineWidth = 1; c.beginPath(); c.ellipse(cx, cy, s * 0.36 * sz, s * 0.22 * sz, 0, 0, TAU); c.stroke();
+    if (deep) { c.beginPath(); c.ellipse(cx, cy, s * 0.22, s * 0.13, 0, 0, TAU); c.stroke(); }
+    const nf = Math.max(1, Math.ceil((deep ? 4 : 3) * ratio));
+    for (let i = 0; i < nf; i++) { const a = t * 0.6 + i * 2.1, fx = cx + Math.cos(a) * s * 0.2 * sz, fy = cy + Math.sin(a) * s * 0.12 * sz;
+      c.save(); c.translate(fx, fy); c.rotate(a + Math.PI / 2); c.fillStyle = deep ? '#3f6f8f' : '#5d7f96'; c.beginPath(); c.ellipse(0, 0, s * 0.11, s * 0.045, 0, 0, TAU); c.fill();
       c.beginPath(); c.moveTo(-s * 0.1, 0); c.lineTo(-s * 0.17, -s * 0.05); c.lineTo(-s * 0.17, s * 0.05); c.fill(); c.restore(); }
     return;
   }
@@ -2343,10 +2462,11 @@ function makeIcon(key, fn) { const c = document.createElement('canvas'); c.width
 function buildIcons() {
   for (const id in TECHS) makeIcon('t_' + id, c => drawTechIcon(c, TECHS[id]));
   for (let p = 0; p < PCOL.length; p++) {
-    for (const t in UNITS) makeIcon('u_' + t + '_' + p, c => { const g = c.createRadialGradient(32, 32, 4, 32, 32, 40); g.addColorStop(0, '#5a4a36'); g.addColorStop(1, '#2a2018'); c.fillStyle = g; c.fillRect(0, 0, 64, 64); drawUnit(c, t, PCOL[p], 30, 32, 80, -0.4, 0.3, t === 'villager' ? 5 : 0, 'wood', false); });
-    for (const t in BUILDINGS) makeIcon('b_' + t + '_' + p, c => { c.fillStyle = '#3d5a2a'; c.fillRect(0, 0, 64, 64); const n = BUILDINGS[t].size, s = 60 / n; drawBuilding(c, t, PCOL[p], 2, 2, s, null, 0); });
+    for (const t in UNITS) makeIcon('u_' + t + '_' + p, c => { const g = c.createRadialGradient(32, 32, 4, 32, 32, 40); g.addColorStop(0, UNITS[t].naval ? '#3478ae' : '#5a4a36'); g.addColorStop(1, UNITS[t].naval ? '#1d4a72' : '#2a2018'); c.fillStyle = g; c.fillRect(0, 0, 64, 64);
+      if (UNITS[t].naval) drawUnit(c, t, PCOL[p], 33, 34, 62, -0.6, 0.3, 0, null, false); else drawUnit(c, t, PCOL[p], 30, 32, 80, -0.4, 0.3, t === 'villager' ? 5 : 0, 'wood', false); });
+    for (const t in BUILDINGS) makeIcon('b_' + t + '_' + p, c => { c.fillStyle = BUILDINGS[t].naval ? '#2f6ea4' : '#3d5a2a'; c.fillRect(0, 0, 64, 64); const n = BUILDINGS[t].size, s = 60 / n; drawBuilding(c, t, PCOL[p], 2, 2, s, null, 0); });
   }
-  for (const t in RES_NODES) makeIcon('r_' + t, c => { c.fillStyle = '#3d5a2a'; c.fillRect(0, 0, 64, 64); drawNode(c, t, 2, 2, 60, 1, 0.3); });
+  for (const t in RES_NODES) makeIcon('r_' + t, c => { c.fillStyle = t === 'fish' || t === 'deepfish' ? '#2f6ea4' : '#3d5a2a'; c.fillRect(0, 0, 64, 64); drawNode(c, t, 2, 2, 60, 1, 0.3); });
   makeIcon('r_tree', c => { c.fillStyle = '#3d5a2a'; c.fillRect(0, 0, 64, 64); const s = 2; c.save(); c.scale(s, s); drawTree(c, 3, 5, 0, 0); c.restore(); });
   makeIcon('i_stop', c => { c.fillStyle = '#2a2018'; c.fillRect(0, 0, 64, 64); c.fillStyle = '#c0392b'; c.beginPath(); for (let k = 0; k < 8; k++) { const a = k / 8 * TAU + TAU / 16; c.lineTo(32 + Math.cos(a) * 22, 32 + Math.sin(a) * 22); } c.fill(); c.fillStyle = '#fff'; c.fillRect(20, 28, 24, 8); });
   makeIcon('i_amove', c => { c.fillStyle = '#2a2018'; c.fillRect(0, 0, 64, 64); c.strokeStyle = '#e5533d'; c.lineWidth = 4; c.beginPath(); c.arc(32, 32, 16, 0, TAU); c.stroke(); c.beginPath(); c.moveTo(32, 8); c.lineTo(32, 22); c.moveTo(32, 42); c.lineTo(32, 56); c.moveTo(8, 32); c.lineTo(22, 32); c.moveTo(42, 32); c.lineTo(56, 32); c.stroke(); circle(c, 32, 32, 4, '#ffd8a8'); });
@@ -2388,7 +2508,7 @@ function render(alpha) {
     if (sel.has(n.id)) { c.strokeStyle = '#fff3c0'; c.lineWidth = 2 / z; if (n.animal) { c.beginPath(); c.ellipse(n.cx * TILE, n.cy * TILE + 3, TILE * 0.4, TILE * 0.28, 0, 0, TAU); c.stroke(); } else c.strokeRect(n.x * TILE + 1, n.y * TILE + 1, TILE - 2, TILE - 2); } }
   blds.sort((a, b) => a.y - b.y).forEach(drawB);
   // selection rings
-  for (const u of units) if (sel.has(u.id)) { c.strokeStyle = u.owner === HUMAN ? '#e8f8d8' : '#ff9a8a'; c.lineWidth = 1.6 / z + 0.6; c.beginPath(); c.ellipse(u.rx * TILE, u.ry * TILE + 3, TILE * 0.38, TILE * 0.28, 0, 0, TAU); c.stroke(); }
+  for (const u of units) if (sel.has(u.id)) { const k = UNITS[u.type].naval ? 1.8 : 1; c.strokeStyle = u.owner === HUMAN ? '#e8f8d8' : '#ff9a8a'; c.lineWidth = 1.6 / z + 0.6; c.beginPath(); c.ellipse(u.rx * TILE, u.ry * TILE + 3, TILE * 0.38 * k, TILE * 0.28 * k, 0, 0, TAU); c.stroke(); }
   units.sort((a, b) => a.ry - b.ry);
   for (const u of units) {
     c.save();
@@ -2446,7 +2566,7 @@ function render(alpha) {
     const tx = Math.floor(wp.x - n / 2 + 0.5), ty = Math.floor(wp.y - n / 2 + 0.5), ok = canPlace(UI.placing, tx, ty, true);
     c.save(); c.globalAlpha = 0.6; drawBuilding(c, UI.placing, PCOL[HUMAN], tx * TILE, ty * TILE, TILE, null, now); c.restore();
     for (let y = ty; y < ty + n; y++) for (let x = tx; x < tx + n; x++) {
-      const i = inB(x, y) ? idx(x, y) : -1, good = n === 1 ? ok : i >= 0 && (M.terrain[i] === T.GRASS || M.terrain[i] === T.SAND) && !M.occ[i] && G.explored[i];
+      const good = n === 1 ? ok : placeTileOk(UI.placing, x, y, true) && (ok || UI.placing !== 'dock');
       c.fillStyle = good ? 'rgba(90,230,90,.22)' : 'rgba(240,60,40,.38)'; c.fillRect(x * TILE, y * TILE, TILE, TILE);
     }
     c.strokeStyle = ok ? '#8f8' : '#f66'; c.lineWidth = 2 / z; c.strokeRect(tx * TILE, ty * TILE, n * TILE, n * TILE);
@@ -2470,7 +2590,7 @@ function drawMinimap() {
   const c = mmCtx, S = mmCv.width / MAP_W;
   c.imageSmoothingEnabled = false; c.drawImage(W.mmBase, 0, 0, mmCv.width, mmCv.height);
   c.imageSmoothingEnabled = true; c.drawImage(W.fogCv, 0, 0, mmCv.width, mmCv.height);
-  const NCOL = { gold: '#f2c230', stone: '#c8d0d8', berries: '#e04a5a', sheep: '#ffffff', deer: '#c08850', fish: '#8fd8ff', relic: '#fff07a' };
+  const NCOL = { gold: '#f2c230', stone: '#c8d0d8', berries: '#e04a5a', sheep: '#ffffff', deer: '#c08850', fish: '#8fd8ff', deepfish: '#c4ecff', relic: '#fff07a' };
   for (const n of W.nodes) if (!n.dead && shownToHuman(n)) { c.fillStyle = NCOL[n.type] || '#e04a5a'; const big = n.type === 'relic' ? 1.5 : 0; c.fillRect(n.x * S - big, n.y * S - big, S + 0.5 + big * 2, S + 0.5 + big * 2); }
   for (const b of W.buildings) if (shownToHuman(b)) { c.fillStyle = PCOL[b.owner].main; c.fillRect(b.x * S, b.y * S, b.w * S, b.h * S); c.strokeStyle = 'rgba(0,0,0,.6)'; c.lineWidth = 1; c.strokeRect(b.x * S, b.y * S, b.w * S, b.h * S); }
   for (const u of W.units) if (shownToHuman(u)) { c.fillStyle = W.selSet.has(u.id) ? '#fff' : PCOL[u.owner].light; c.fillRect(u.x * S - 1.5, u.y * S - 1.5, 3, 3); }
@@ -2508,8 +2628,9 @@ function taskText(u) {
   if (t.type === 'gather') {
     const tg = t.tree >= 0 ? null : E(t.node);
     if (tg && tg.animal && tg.hp > 0) return tg.type === 'deer' ? 'Hunting deer' : 'Slaughtering sheep';
-    const what = t.tree >= 0 ? 'wood' : tg && tg.kind === 'building' ? 'farm' : tg && ['sheep', 'deer', 'fish', 'berries'].includes(tg.type) ? (tg.type === 'deer' ? 'venison' : tg.type) : t.res;
-    return (u.carry >= carryCap(u) || t.done ? 'Returning ' : 'Gathering ') + what + (u.carry > 0 ? ` · carrying ${Math.floor(u.carry)}/${carryCap(u)}` : '');
+    const what = t.tree >= 0 ? 'wood' : tg && tg.kind === 'building' ? (tg.type === 'fishtrap' ? 'from a Fish Trap' : 'farm') : tg && ['sheep', 'deer', 'fish', 'deepfish', 'berries'].includes(tg.type) ? (tg.type === 'deer' ? 'venison' : tg.type === 'deepfish' ? 'fish' : tg.type) : t.res;
+    const ship = UNITS[u.type].naval;
+    return (u.carry >= carryCap(u) || t.done ? (ship ? 'Sailing home with the catch' : 'Returning ' + what) : (ship ? 'Fishing ' + (tg && tg.kind === 'building' ? what : '') : 'Gathering ' + what)) + (u.carry > 0 ? ` · carrying ${Math.floor(u.carry)}/${carryCap(u)}` : '');
   }
   if (t.type === 'convert') { const e = E(t.target); return u.faith < 1 ? 'Regaining faith…' : 'Converting' + (e ? ' ' + UNITS[e.type].name : ''); }
   if (t.type === 'heal') return 'Healing';
@@ -2526,7 +2647,8 @@ function infoOne(e) {
     const tip = e.type === 'relic' ? `Right-click it with a monk to carry it to your Monastery, where it earns ${RELIC_GOLD * 60} gold a minute. Hold every relic for ${RELIC_WIN_TIME / 60} minutes to win.`
       : e.type === 'sheep' ? 'Sheep follow whoever finds them back to their Town Center. Right-click with villagers to slaughter and gather.'
       : e.type === 'deer' && e.hp > 0 ? 'Right-click with villagers to hunt: they throw spears, then butcher it.'
-      : e.type === 'fish' ? 'Villagers can fish from the shore. Build a Mill nearby.' : 'Right-click with villagers selected to gather.';
+      : e.type === 'fish' ? 'Villagers can fish from the shore (build a Mill or Dock nearby), and Fishing Ships from the water.'
+      : e.type === 'deepfish' ? 'Too far out for villagers. Build a Dock and send Fishing Ships.' : 'Right-click with villagers selected to gather.';
     return `<div class="row"><img class="portrait" src="${iconFor(e)}"><div><div class="pname">${rd.name}${ownerTag(e)}</div>${rd.res ? `<div class="stats" style="margin-top:6px"><span>${RES_LABEL[rd.res]} left <b>${Math.ceil(e.amount)}</b></span></div>` : ''}<div class="status">${tip}</div></div></div>`;
   }
   if (e.kind === 'unit' && e.type === 'monk') {
@@ -2534,6 +2656,12 @@ function infoOne(e) {
     return `<div class="row"><img class="portrait" src="${iconFor(e)}"><div style="min-width:0"><div class="pname">${d.name}${ownerTag(e)}</div>${hpHtml(e)}
       <div class="stats"><span>Converts at range <b>${d.range}</b></span><span>Faith <b>${Math.floor((e.faith == null ? 1 : e.faith) * 100)}%</b></span><span>Speed <b>${+ust(e.owner, e.type, 'speed').toFixed(2)}</b></span>${e.relic ? '<span><b style="color:#f2c230">Carrying a relic</b></span>' : ''}</div>
       ${e.owner === HUMAN ? `<div class="status">${taskText(e)}${!e.task ? ' · heals nearby wounded' : ''}</div>` : ''}</div></div>`;
+  }
+  if (e.kind === 'unit' && UNITS[e.type].civilian) {
+    const d = UNITS[e.type], S = k => +ust(e.owner, e.type, k).toFixed(2);
+    return `<div class="row"><img class="portrait" src="${iconFor(e)}"><div style="min-width:0"><div class="pname">${d.name}${ownerTag(e)}</div>${hpHtml(e)}
+      <div class="stats"><span>Carries <b>${carryCap(e)}</b></span><span>Armor <b>${S('armor')}</b>/<b>${S('parmor')}</b></span><span>Speed <b>${S('speed')}</b></span><span>Sight <b>${d.los}</b></span></div>
+      ${e.owner === HUMAN ? `<div class="status">${taskText(e)}</div>` : ''}</div></div>`;
   }
   if (e.kind === 'unit') {
     const d = UNITS[e.type], S = k => +ust(e.owner, e.type, k).toFixed(2), atk = S('atk');
@@ -2576,8 +2704,11 @@ function buildPanel() {
   else if (!s.length) info = `<div class="empty"><b style="color:var(--text)">Nothing selected.</b><br>Left-click a unit or building, or drag a box around your units.<br>Press <kbd>.</kbd> for an idle villager, <kbd>Home</kbd> for your Town Center, <kbd>F1</kbd> for help.</div>`;
   else if (s.length === 1) info = infoOne(s[0]); else info = infoMulti(s);
   const own = s.filter(e => e.owner === HUMAN);
-  const vils = own.filter(e => e.kind === 'unit' && e.type === 'villager'), mil = own.filter(e => e.kind === 'unit' && e.type !== 'villager');
-  if (vils.length) for (const t of BUILD_ORDER) {
+  const vils = own.filter(e => e.kind === 'unit' && e.type === 'villager'), mil = own.filter(e => e.kind === 'unit' && e.type !== 'villager' && !UNITS[e.type].civilian);
+  const workers = own.filter(e => e.kind === 'unit' && UNITS[e.type].builds);
+  // build buttons: what the selected villagers (or Fishing Ships) can build
+  const canB = new Set(); for (const w of workers) for (const t of UNITS[w.type].builds) canB.add(t);
+  for (const t of BUILD_ORDER.concat(['fishtrap'])) if (canB.has(t)) {
     const d = BUILDINGS[t], ageOk = (d.age || 1) <= p.age, ok = meetsReq(p, d);
     acts += B('build:' + t, ICONS['b_' + t + '_0'], d.hotkey, tipFor(d, !ageOk ? 'Requires the ' + AGES[d.age].name : ok ? '' : 'Requires a completed ' + BUILDINGS[d.requires].name), !ok, !canAfford(p, costOf(p, d)));
   }
@@ -2596,7 +2727,7 @@ function buildPanel() {
     }
   }
   if (mil.length) acts += B('amove', ICONS.i_amove, 'Q', '<b>Attack-move</b><br>Move to a point, fighting any enemy met on the way.');
-  if (vils.length || mil.length) acts += B('stop', ICONS.i_stop, 'X', '<b>Stop</b>');
+  if (own.some(e => e.kind === 'unit')) acts += B('stop', ICONS.i_stop, 'X', '<b>Stop</b>');
   if (own.length) acts += B('delete', ICONS.i_delete, '', '<b>Delete</b> (Del)<br>Unfinished, untouched foundations are refunded.');
   UI.hot = hot;
   if (info !== UI.lastHtml) { els.info.innerHTML = info; UI.lastHtml = info; }
@@ -2642,7 +2773,7 @@ function doAction(act, shift) {
     if (b) { const err = queueTech(b, arg); if (err) msg(err, true); else Sfx.play('click'); }
   } else if (cmd === 'cancel') { const b = s[0]; if (b && b.kind === 'building') cancelQueue(b, +arg); }
   else if (cmd === 'stop') { for (const u of s) if (u.kind === 'unit') orderStop(u); }
-  else if (cmd === 'amove') { if (s.some(u => u.kind === 'unit' && u.type !== 'villager')) { UI.cmd = 'amove'; UI.placing = null; } }
+  else if (cmd === 'amove') { if (s.some(u => u.kind === 'unit' && u.type !== 'villager' && !UNITS[u.type].civilian)) { UI.cmd = 'amove'; UI.placing = null; } }
   else if (cmd === 'delete') {
     for (const e of s) {
       if (e.kind === 'building' && !e.built && e.progress === 0) { refund(p, costOf(p, BUILDINGS[e.type])); e.dead = true; e.deathT = 2.4; clearOcc(e); }
@@ -2693,7 +2824,7 @@ function scrollCamera(dt) {
 }
 function entityAt(wx, wy, r = 0.45) {
   let best = null, bd = r;
-  for (const u of W.units) { if (u.dead || !shownToHuman(u)) continue; const d = dist(u.x, u.y, wx, wy); if (d < bd) { bd = d; best = u; } }
+  for (const u of W.units) { if (u.dead || !shownToHuman(u)) continue; const d = dist(u.x, u.y, wx, wy) - (UNITS[u.type].naval ? 0.3 : 0); if (d < bd) { bd = d; best = u; } }
   if (best) return best;
   for (const b of W.buildings) if (!b.dead && shownToHuman(b) && wx >= b.x && wx < b.x + b.w && wy >= b.y && wy < b.y + b.h) return b;
   for (const n of W.nodes) if (!n.dead && shownToHuman(n) && (n.animal ? dist(n.cx, n.cy, wx, wy) < r + 0.05 : Math.floor(wx) === n.x && Math.floor(wy) === n.y)) return n;
@@ -2712,8 +2843,14 @@ function formation(n, x, y) {
 }
 function groupMove(units, x, y, am) {
   if (!units.length) return;
+  // ships and land units each form up on their own ground (water or land)
+  const ships = units.filter(u => UNITS[u.type].naval);
+  if (ships.length && ships.length < units.length) { groupMove(units.filter(u => !UNITS[u.type].naval), x, y, am); groupMove(ships, x, y, am); return; }
   const cx = units.reduce((s, u) => s + u.x, 0) / units.length, cy = units.reduce((s, u) => s + u.y, 0) / units.length;
+  NAVAL = ships.length ? 1 : 0;
+  if (NAVAL && !walkAt(x, y)) { const n = nearestWalk(Math.floor(x), Math.floor(y), 10); if (n) { x = n[0] + 0.5; y = n[1] + 0.5; } }
   const pts = formation(units.length, x, y);
+  NAVAL = 0;
   // assign: sort both by projection on the travel direction so lines don't cross much
   const dx = x - cx, dy = y - cy, l = Math.hypot(dx, dy) || 1, px = -dy / l, py = dx / l;
   const us = units.slice().sort((a, b) => (a.x * px + a.y * py) - (b.x * px + b.y * py));
@@ -2745,9 +2882,33 @@ function contextCommand(wx, wy) {
       units = units.filter(u => u.type !== 'monk'); if (!units.length) return;
     }
   }
-  if (tgt && isEnemy(HUMAN, tgt.owner)) { for (const u of units) if (u.type !== 'monk') orderAttack(u, tgt); W.markers.push({ x: ecx(tgt), y: ecy(tgt), t: now, col: '#ff5a40' }); return; }
+  // Fishing Ships: fish, work or build Fish Traps, unload at a Dock
+  const fishers = units.filter(u => u.type === 'fishingship');
+  if (fishers.length && tgt) {
+    let handled = true;
+    if (tgt.kind === 'res' && SHIP_FOOD_NODES[tgt.type] !== undefined) for (const f of fishers) orderGather(f, tgt);
+    else if (tgt.kind === 'building' && tgt.owner === HUMAN && tgt.type === 'fishtrap') {
+      let taken = farmerActive(tgt);
+      for (const f of fishers) { if (!tgt.built || tgt.hp < tgt.maxHp) orderBuild(f, tgt); else if (!taken) { orderGather(f, tgt); taken = true; } else groupMove([f], tgt.cx, tgt.cy); }
+    } else if (tgt.kind === 'building' && tgt.owner === HUMAN && tgt.type === 'dock' && tgt.built) {
+      for (const f of fishers) { if (f.carry > 0) orderDrop(f, tgt); else groupMove([f], tgt.cx, tgt.cy); }
+    } else handled = false;
+    if (handled) {
+      W.markers.push({ x: ecx(tgt), y: ecy(tgt), t: now, col: '#ffe08a' });
+      units = units.filter(u => u.type !== 'fishingship'); if (!units.length) return;
+    }
+  }
+  if (tgt && isEnemy(HUMAN, tgt.owner)) {
+    for (const u of units) if (u.type !== 'monk' && !UNITS[u.type].civilian) orderAttack(u, tgt);
+    groupMove(units.filter(u => UNITS[u.type].civilian), wx, wy);
+    W.markers.push({ x: ecx(tgt), y: ecy(tgt), t: now, col: '#ff5a40' }); return;
+  }
   const vils = units.filter(u => u.type === 'villager'), mil = units.filter(u => u.type !== 'villager');
   if (tgt && tgt.kind === 'res' && !isGatherable(tgt)) { groupMove(units, wx, wy); W.markers.push({ x: wx, y: wy, t: now, col: '#9f9' }); return; }
+  if (tgt && tgt.kind === 'res' && RES_NODES[tgt.type].naval && vils.length) {
+    msg('Villagers cannot reach deep-water fish. Build a Dock and train Fishing Ships.', true);
+    groupMove(units, wx, wy); return;
+  }
   if (tgt && tgt.kind === 'res' || tree) {
     for (const v of vils) orderGather(v, tree || tgt);
     groupMove(mil, wx, wy);
@@ -2757,8 +2918,8 @@ function contextCommand(wx, wy) {
     const d = BUILDINGS[tgt.type]; let farmTaken = farmerActive(tgt);
     const rest = [];
     for (const v of vils) {
-      if (!tgt.built || tgt.hp < tgt.maxHp) orderBuild(v, tgt);
-      else if (d.farm && !farmTaken) { orderGather(v, tgt); farmTaken = true; }
+      if ((!tgt.built || tgt.hp < tgt.maxHp) && canBuildType(v, tgt.type)) orderBuild(v, tgt);
+      else if (d.farm && !d.naval && !farmTaken) { orderGather(v, tgt); farmTaken = true; }
       else if (d.drop && v.carry > 0 && d.drop.includes(v.carryType)) orderDrop(v, tgt);
       else rest.push(v);
     }
@@ -2777,8 +2938,8 @@ function tryPlace(wx, wy, shift) {
   pay(p, cost);
   if (type === 'gate') { const o = E(M.occ[idx(tx, ty)]); if (o) { o.dead = true; o.deathT = 2.5; clearOcc(o); } } // gate replaces a wall
   const b = placeBuilding(type, HUMAN, tx, ty, false);
-  const vils = selEnts().filter(e => e.owner === HUMAN && e.kind === 'unit' && e.type === 'villager');
-  for (const v of vils) orderBuild(v, b);
+  const builders = selEnts().filter(e => e.owner === HUMAN && e.kind === 'unit' && canBuildType(e, type));
+  for (const v of builders) orderBuild(v, b);
   if (!shift || !canAfford(p, cost)) UI.placing = null;
   UI.panelDirty = true; Sfx.play('place');
 }
@@ -3018,8 +3179,8 @@ function tbAction(a) {
   if (!G || G.over) return;
   const mine = W.units.filter(u => u.owner === HUMAN && !u.dead);
   if (a === 'box') { setBoxMode(!UI.boxMode); if (UI.boxMode) msg('Drag a box over the units you want'); return; }
-  if (a === 'army') { const s = mine.filter(u => u.type !== 'villager'); if (s.length) { setSel(s); } else msg('You have no soldiers yet', true); return; }
-  if (a === 'idlearmy') { const s = mine.filter(u => u.type !== 'villager' && !u.task); if (s.length) { setSel(s); centerOn(s[0].x, s[0].y); } else msg('No idle soldiers'); return; }
+  if (a === 'army') { const s = mine.filter(u => u.type !== 'villager' && !UNITS[u.type].civilian); if (s.length) { setSel(s); } else msg('You have no soldiers yet', true); return; }
+  if (a === 'idlearmy') { const s = mine.filter(u => u.type !== 'villager' && !UNITS[u.type].civilian && !u.task); if (s.length) { setSel(s); centerOn(s[0].x, s[0].y); } else msg('No idle soldiers'); return; }
   if (a === 'tc') { const tc = W.buildings.find(b => b.owner === HUMAN && b.type === 'towncenter'); if (tc) { setSel([tc]); centerOn(tc.cx, tc.cy); } return; }
   if (a === 'clear') { UI.placing = null; UI.cmd = null; UI.wallDrag = null; setBoxMode(false); setSel([]); return; }
   if (a === 'full') { try { if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen().catch(() => msg('Full screen is not available here', true)); } catch (err) { msg('Full screen is not available here', true); } }
@@ -3047,7 +3208,7 @@ function loadGame(text) {
   UI.civTip = '';
   G = data.G; G.paused = false; G.over = null;
   G.explored = Uint8Array.from(data.explored, ch => +ch);
-  M = { terrain: Uint8Array.from(data.terrain, ch => +ch), wood: Float32Array.from(data.wood), occ: new Int32Array(NT), solid: new Uint8Array(NT), gate: new Uint8Array(NT) };
+  M = { terrain: Uint8Array.from(data.terrain, ch => +ch), wood: Float32Array.from(data.wood), occ: new Int32Array(NT), solid: new Uint8Array(NT), gate: new Uint8Array(NT), wsolid: new Uint8Array(NT) };
   resetRuntime();
   for (const e of G.ents) { W.byId.set(e.id, e); }
   for (const e of G.ents) if (!e.dead && e.kind !== 'unit' && !e.animal) { const r = tileRect(e); for (let y = r[1]; y <= r[3]; y++) for (let x = r[0]; x <= r[2]; x++) M.occ[idx(x, y)] = e.id; }
@@ -3067,10 +3228,11 @@ function resetRuntime() {
   if (!W.fogCv) { W.fogCv = document.createElement('canvas'); W.fogCv.width = MAP_W; W.fogCv.height = MAP_H; W.fogCtx = W.fogCv.getContext('2d'); W.fogImg = W.fogCtx.createImageData(MAP_W, MAP_H); }
   UI.sel = []; UI.placing = null; UI.cmd = null; UI.lastHtml = null; UI.lastActs = null; UI.msgs = []; UI.lastAlert = -99; UI.groups = {}; UI.panelDirty = true;
 }
-function newGame(diff, seed, rivals = 1, mode = 'ffa', civ = 'random', reveal = 'normal') {
-  const gen = genMap(seed);
-  G = { v: 4, seed, diff, rivals, mode, civChoice: civ, reveal, tick: 0, time: 0, nextId: 1, speed: 1, paused: false, over: null, rs: (seed * 2654435761 >>> 0) || 1, players: [], ents: [], proj: [], ai: [], explored: new Uint8Array(NT) };
-  M = { terrain: gen.terrain, wood: gen.wood, occ: new Int32Array(NT), solid: new Uint8Array(NT), gate: new Uint8Array(NT) };
+function newGame(diff, seed, rivals = 1, mode = 'ffa', civ = 'random', reveal = 'normal', mapType = 'land') {
+  if (!MAP_TYPES[mapType]) mapType = 'land';
+  const gen = genMap(seed, mapType);
+  G = { v: 4, seed, diff, rivals, mode, civChoice: civ, reveal, mapType, tick: 0, time: 0, nextId: 1, speed: 1, paused: false, over: null, rs: (seed * 2654435761 >>> 0) || 1, players: [], ents: [], proj: [], ai: [], explored: new Uint8Array(NT) };
+  M = { terrain: gen.terrain, wood: gen.wood, occ: new Int32Array(NT), solid: new Uint8Array(NT), gate: new Uint8Array(NT), wsolid: new Uint8Array(NT) };
   resetRuntime();
   for (let i = 0; i < NT; i++) refreshSolid(i);
   const D = DIFFS[diff];
@@ -3124,7 +3286,7 @@ function setSpeedUI() { for (const b of $('speedSeg').children) b.classList.togg
 function randomSeed() { return Math.floor(Math.random() * 999999) + 1; }
 function startFromMenu() {
   const s = parseInt($('seedIn').value, 10) || randomSeed();
-  newGame(UI.diff, s, UI.rivals, UI.mode, UI.civ, UI.reveal); show('start', false); show('end', false); show('pause', false);
+  newGame(UI.diff, s, UI.rivals, UI.mode, UI.civ, UI.reveal, UI.mapType); show('start', false); show('end', false); show('pause', false);
 }
 // wire menus
 $('seedIn').value = randomSeed();
@@ -3175,7 +3337,7 @@ for (const b of $('speedSeg').children) b.onclick = () => { if (G) G.speed = +b.
 $('pHelp').onclick = () => showHelp(true);
 $('helpClose').onclick = () => showHelp(false);
 $('pQuit').onclick = () => { show('pause', false); G = null; show('start', true); $('btnContinue').style.display = hasSave() ? '' : 'none'; };
-$('eAgain').onclick = () => { show('end', false); newGame(G ? G.diff : UI.diff, randomSeed(), G ? G.rivals : UI.rivals, G ? G.mode : UI.mode, G ? G.civChoice : UI.civ, G ? G.reveal || 'normal' : UI.reveal); };
+$('eAgain').onclick = () => { show('end', false); newGame(G ? G.diff : UI.diff, randomSeed(), G ? G.rivals : UI.rivals, G ? G.mode : UI.mode, G ? G.civChoice : UI.civ, G ? G.reveal || 'normal' : UI.reveal, G ? G.mapType || 'land' : UI.mapType); };
 UI.rivals = 1; UI.mode = 'ffa'; UI.civ = 'random';
 try { const c = localStorage.getItem('ember-iron-civ'); if (c && (CIVS[c] || c === 'random')) UI.civ = c; } catch (e) { /* storage blocked */ }
 function renderCivPick() {
@@ -3201,6 +3363,20 @@ function setReveal(r) {
 for (const b of $('revealSeg').children) b.onclick = () => { setReveal(b.dataset.r); try { localStorage.setItem('ember-iron-reveal', UI.reveal); } catch (err) { /* ignore */ } };
 let savedReveal = 'normal'; try { savedReveal = localStorage.getItem('ember-iron-reveal') || 'normal'; } catch (e) { /* storage blocked */ }
 setReveal(savedReveal);
+// Map type, remembered between visits
+const MAP_NOTES = {
+  land: 'Open country with a few small ponds. A land war.',
+  lakes: 'Big lakes between the towns, full of fish. Docks and Fishing Ships pay off.',
+  coastal: 'A great sea in the middle that every town touches, with rich deep-water fishing.'
+};
+function setMapType(m) {
+  UI.mapType = MAP_TYPES[m] ? m : 'land';
+  for (const x of $('mapSeg').children) x.classList.toggle('on', x.dataset.mt === UI.mapType);
+  $('mapNote').textContent = MAP_NOTES[UI.mapType];
+}
+for (const b of $('mapSeg').children) b.onclick = () => { setMapType(b.dataset.mt); try { localStorage.setItem('ember-iron-maptype', UI.mapType); } catch (err) { /* ignore */ } };
+let savedMap = 'land'; try { savedMap = localStorage.getItem('ember-iron-maptype') || 'land'; } catch (e) { /* storage blocked */ }
+setMapType(savedMap);
 function updateSndBtn() { $('sndBtn').textContent = (innerWidth < 900 ? '♪ ' : 'Sound: ') + (Sfx.enabled ? 'on' : 'off'); }
 try { Sfx.enabled = localStorage.getItem('ember-iron-sound') !== '0'; } catch (e) { /* storage blocked: keep default */ }
 updateSndBtn();

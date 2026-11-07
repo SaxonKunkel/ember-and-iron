@@ -291,6 +291,8 @@ body.nopanel #msgs{bottom:calc(44px + var(--sb))}
           <li><b>Monks</b> (Monastery, Town Age) heal nearby wounded units on their own. Right-click an enemy unit to convert it &mdash; then the monk needs time to regain faith. Right-click a <b>relic</b> to carry it to your Monastery, where it earns gold.</li>
           <li><b>Civilizations:</b> eight real medieval peoples, each with bonuses drawn from what it was known for, a favored army, and a unique unit trained at the Keep. Hover the civ name in the top bar to see yours. Rivals get a random civilization.</li>
           <li><b>Fishing:</b> villagers can fish shore fish. A <b>Dock</b> (built in the water against the shore) trains <b>Fishing Ships</b>, which also reach deep-water fish further out and build <b>Fish Traps</b> &mdash; endless food on the water. Pick the <b>Lakes</b> or <b>Coastal</b> map type for lots of water.</li>
+          <li><b>Sea battles</b> (Town Age, at the Dock): the <b>War Galley</b> shoots arrows at ships and at anything near the shore; the <b>Fire Ship</b> burns galleys at close range and shrugs off arrows; the <b>Demolition Ship</b> rams and explodes, wrecking Fire Ships and bunched-up fleets &mdash; but galleys sink it before it arrives. Towers and Town Centers shoot ships too.</li>
+          <li><b>Transports</b> carry 5 units. Select units and right-click (or tap) your Transport to board; then right-click a spot on the shore to sail there and land them, or press <b>Unload</b>. If a Transport sinks, everyone aboard is lost.</li>
           <li><b>Walls:</b> pick Stone Wall and drag to draw a line. Place a Gate on one of your walls to let your units through.</li>
           <li><b>Fight:</b> right-click an enemy to attack, or press <kbd>Q</kbd> and click to attack-move. Your Town Center shoots arrows at raiders.</li>
         </ul>
@@ -434,6 +436,19 @@ const UNITS = {
   // Ships (naval: moves only on water). civilian = never picks fights and isn't part of the army.
   fishingship: { name: 'Fishing Ship', cls: 'ship', naval: true, civilian: true, age: 1, hp: 60, atk: 0, armor: 0, parmor: 4, range: 0, reload: 2, speed: 2.1, los: 6, pop: 1, carry: 15,
     builds: ['fishtrap'], cost: { wood: 75 }, time: 20, hotkey: 'F', desc: 'Fishes along shores and in deep water, carrying 15 food at a time to the Dock. Builds Fish Traps.' },
+  transport: { name: 'Transport Ship', cls: 'ship', naval: true, civilian: true, age: 1, hp: 110, atk: 0, armor: 0, parmor: 5, range: 0, reload: 2, speed: 2.4, los: 6, pop: 1, capacity: 5,
+    cost: { wood: 125 }, time: 30, hotkey: 'T', desc: 'Carries up to 5 land units across the water. Select units and tap the Transport to board; then send it to a shore to land them.' },
+  // Warships. Counters: Fire Ship beats Galley up close, Galley beats Demolition Ship (shoots it before it arrives),
+  // Demolition Ship beats Fire Ships and packed fleets (one big blast).
+  galley: { name: 'War Galley', cls: 'ship', naval: true, age: 2, hp: 120, atk: 7, armor: 0, parmor: 4, range: 7, reload: 2.5, speed: 2.3, los: 9, pop: 1,
+    cost: { wood: 90, gold: 30 }, time: 30, hotkey: 'G', projectile: true, bonus: { ship: 4, demo: 24, building: 6 },
+    desc: 'Oared warship firing arrows at ships, and at units and buildings near the shore. Shreds Demolition Ships before they arrive; burns to Fire Ships.' },
+  fireship: { name: 'Fire Ship', cls: 'ship', naval: true, age: 2, hp: 120, atk: 2, armor: 1, parmor: 9, range: 2.5, reload: 0.5, speed: 2.5, los: 7, pop: 1, flame: true,
+    cost: { wood: 75, gold: 45 }, time: 30, hotkey: 'R', bonus: { ship: 5, demo: 5 },
+    desc: 'Sprays burning oil at close range. Arrows barely hurt it, and it sets galleys ablaze; Demolition Ships blow it apart.' },
+  demoship: { name: 'Demolition Ship', cls: 'demo', naval: true, age: 2, hp: 30, atk: 140, armor: 0, parmor: 0, range: 0.5, reload: 1, speed: 2.2, los: 7, pop: 1, blast: 1.9, navalTargets: true,
+    cost: { wood: 70, gold: 50 }, time: 25, hotkey: 'E', bonus: { building: 80 },
+    desc: 'A fast boat packed with powder. Rams an enemy ship or shore building and explodes, wrecking everything nearby — itself included. Galleys sink it before it gets close.' },
 };
 const BUILDINGS = {
   towncenter: { name: 'Town Center', age: 1, size: 3, hp: 1800, armor: 1, parmor: 6, cost: { wood: 275, stone: 100 }, time: 90, los: 8, pop: 5,
@@ -465,8 +480,8 @@ const BUILDINGS = {
   gate: { name: 'Gate', age: 1, size: 1, hp: 900, armor: 4, parmor: 8, cost: { stone: 30 }, time: 20, los: 2, gate: true, hotkey: 'O',
     desc: 'Your units walk through; enemies cannot. Can be placed over one of your walls.' },
   // naval buildings stand in the water: a Dock must touch the shore, a Fish Trap can go anywhere on open water
-  dock: { name: 'Dock', age: 1, size: 3, hp: 1800, armor: 1, parmor: 6, cost: { wood: 150 }, time: 35, los: 6, naval: true, drop: ['food'], trains: ['fishingship'], hotkey: 'J',
-    desc: 'Built in the water against the shore. Trains ships and takes food from fishing. Villagers can drop food here too.' },
+  dock: { name: 'Dock', age: 1, size: 3, hp: 1800, armor: 1, parmor: 6, cost: { wood: 150 }, time: 35, los: 6, naval: true, drop: ['food'], trains: ['fishingship', 'transport', 'galley', 'fireship', 'demoship'], hotkey: 'J',
+    desc: 'Built in the water against the shore. Trains Fishing Ships, Transports and (Town Age) warships, and takes food from fishing. Villagers can drop food here too.' },
   fishtrap: { name: 'Fish Trap', age: 1, size: 2, hp: 250, armor: 0, parmor: 0, cost: { wood: 80 }, time: 20, los: 1, naval: true, walkable: true, farm: true, requires: 'dock', hotkey: 'T',
     desc: 'A farm on the water: endless food for the Fishing Ship that works it. Built by Fishing Ships; requires a Dock.' },
 };
@@ -516,6 +531,8 @@ const TECHS = {
   engineers: { name: 'Siege Engineers', at: 'siegeworkshop', age: 3, cost: { food: 200, wood: 200 }, time: 45, icon: 'atk', fx: { units: ['siege', { range: 1, atk: 3 }] }, desc: 'Siege +3 attack; mangonels and trebuchets +1 range.' },
   arrowslits: { name: 'Arrow Slits', at: 'watchtower', age: 3, cost: { food: 150, wood: 100 }, time: 40, icon: 'atk', fx: { bld: { atk: 2 } }, desc: 'Watchtowers, Keeps and Town Centers +2 arrow attack.' },
   gillnets: { name: 'Gillnets', at: 'dock', age: 2, cost: { food: 150, wood: 125 }, time: 40, icon: 'food', fx: { node: [['deepfish', 0.25], ['fishtrap', 0.25]] }, desc: 'Fishing Ships gather 25% faster, from fish and Fish Traps.' },
+  drydock: { name: 'Dry Dock', at: 'dock', age: 2, cost: { food: 200, wood: 150 }, time: 45, icon: 'speed', fx: { units: ['ship', { speed: 0.35, hp: 15 }] }, desc: 'Ships (except Demolition Ships) move faster and gain +15 HP.' },
+  heavygalley: { name: 'Heavy Galleys', at: 'dock', age: 3, cost: { food: 250, gold: 200 }, time: 55, icon: 'atk', fx: { unitType: ['galley', { hp: 40, atk: 2, range: 1, parmor: 1 }] }, desc: 'War Galleys gain +40 HP, +2 attack, +1 range and +1 arrow armor.' },
 };
 const DIFFS = {
   easy:   { label: 'Easy',   barracksAt: 12, age2Vils: 13, age3At: 1e9, towers: 0, monks: 1, trainSpeed: 0.7,  gather: 0.85, maxVils: 16, firstWave: 600, waveEvery: 210, waveBase: 4, waveGrow: 2, barracks: 1, armyCap: 14 },
@@ -577,7 +594,7 @@ const Sfx = {
   init() { try { if (!this.ctx) this.ctx = new (window.AudioContext || window.webkitAudioContext)(); if (this.ctx.state === 'suspended') this.ctx.resume(); } catch (e) { this.ctx = null; } },
   play(name, vol = 1) {
     if (!this.enabled || !this.ctx) return;
-    const now = this.ctx.currentTime, gap = { hit: 0.07, arrow: 0.08, death: 0.1, chop: 0.12, hammer: 0.12 }[name] || 0.05;
+    const now = this.ctx.currentTime, gap = { hit: 0.07, arrow: 0.08, death: 0.1, chop: 0.12, hammer: 0.12, flame: 0.3 }[name] || 0.05;
     if (this.last[name] && now - this.last[name] < gap) return; this.last[name] = now;
     const S = SOUNDS[name]; if (S) try { S(this.ctx, now, vol * 0.6); } catch (e) { /* ignore */ }
   },
@@ -616,6 +633,8 @@ const SOUNDS = {
   catapult: (a, t, v) => { noise(a, t, 0.2, 0.35 * v, 250, 1.5); tone(a, t, 140, 0.18, 'square', 0.05 * v, 60); },
   thud: (a, t, v) => { tone(a, t, 70, 0.3, 'sine', 0.5 * v, 35); noise(a, t, 0.25, 0.3 * v, 500, 1); },
   relic: (a, t, v) => { [523, 659, 784].forEach((f, k) => tone(a, t + k * 0.09, f, 0.35, 'sine', 0.12 * v)); },
+  flame: (a, t, v) => noise(a, t, 0.25, 0.25 * v, 700, 0.6),
+  blast: (a, t, v) => { tone(a, t, 60, 0.6, 'sine', 0.7 * v, 25); noise(a, t, 1.0, 0.7 * v, 160, 0.5); noise(a, t, 0.3, 0.4 * v, 1500, 1); },
 };
 // positional-ish: only play world sounds the player can actually see on screen
 function sfxAt(name, x, y) {
@@ -1147,11 +1166,13 @@ function step() {
 }
 function gridIdx(x, y) { return clamp(Math.floor(y / GC), 0, GW - 1) * GW + clamp(Math.floor(x / GC), 0, GW - 1); }
 function rebuildLists() {
-  W.units.length = 0; W.buildings.length = 0; W.nodes.length = 0;
+  W.units.length = 0; W.buildings.length = 0; W.nodes.length = 0; W.carried = W.carried || []; W.carried.length = 0;
   for (const g of W.grid) g.length = 0;
   for (const p of G.players) { p.pop = 0; p.popCap = 0; }
   for (const e of G.ents) {
     if (e.dead) continue;
+    // units aboard a Transport are out of the world (no moving, fighting, drawing) but still count for population
+    if (e.kind === 'unit' && e.carriedBy) { W.carried.push(e); G.players[e.owner].pop += UNITS[e.type].pop; continue; }
     if (e.kind === 'unit') { W.units.push(e); G.players[e.owner].pop += UNITS[e.type].pop; W.grid[gridIdx(e.x, e.y)].push(e); }
     else if (e.kind === 'building') { W.buildings.push(e); if (e.built && BUILDINGS[e.type].pop) G.players[e.owner].popCap += BUILDINGS[e.type].pop; }
     else W.nodes.push(e);
@@ -1181,6 +1202,8 @@ function updateUnit(u, dt) {
     case 'convert': taskConvert(u, t, dt); break;
     case 'heal': taskHeal(u, t, dt); break;
     case 'relic': taskRelic(u, t); break;
+    case 'board': taskBoard(u, t); break;
+    case 'ferry': taskFerry(u, t); break;
     default: u.task = null;
   }
   followPath(u, dt);
@@ -1286,6 +1309,50 @@ function taskGather(u, t, dt) {
     else { u.task = null; resetNav(u); }
   }
 }
+// --- transports ---
+const cargoOf = s => G.ents.filter(e => e.kind === 'unit' && !e.dead && e.carriedBy === s.id);
+const capacityOf = s => ust(s.owner, s.type, 'capacity');
+// a water tile right next to land, as close as possible to (x,y): where a Transport meets units on the shore
+function shoreSpot(x, y, maxR = 14) {
+  const tx = Math.floor(x), ty = Math.floor(y);
+  for (const s of SPIRAL) { if (s[2] > maxR * maxR) break; const xx = tx + s[0], yy = ty + s[1]; if (!inB(xx, yy)) continue; const i = idx(xx, yy);
+    if (M.wsolid[i]) continue;
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nx = xx + dx, ny = yy + dy; if (inB(nx, ny) && !M.solid[idx(nx, ny)]) return { x: xx + 0.5, y: yy + 0.5 }; } }
+  return null;
+}
+function orderBoard(u, ship) { u.task = { type: 'board', target: ship.id }; resetNav(u); }
+function taskBoard(u, t) {
+  const s = E(t.target);
+  if (!s || s.dead || s.owner !== u.owner || s.type !== 'transport') { u.task = null; resetNav(u); return; }
+  if (dist(u.x, u.y, s.x, s.y) <= 1.9) {
+    if (cargoOf(s).length >= capacityOf(s)) { if (u.owner === HUMAN) msg('The Transport is full', true); u.task = null; resetNav(u); return; }
+    u.carriedBy = s.id; u.task = null; resetNav(u); s.load = cargoOf(s).length;
+    if (W.selSet.has(u.id)) { UI.sel = UI.sel.filter(id => id !== u.id); W.selSet = new Set(UI.sel); UI.panelDirty = true; }
+    return;
+  }
+  chase(u, 'e' + s.id, s.x, s.y);
+  if (u.fails > 8) { u.task = null; resetNav(u); if (u.owner === HUMAN) msg('Cannot reach the Transport — bring it to the shore', true); }
+}
+function orderFerry(s, x, y) { s.task = { type: 'ferry', x, y }; resetNav(s); s.goalKey = 'ferry'; requestPath(s, shoreSpot(x, y) || { x, y }); }
+// sail to the shore near (x,y) and put everyone ashore
+function taskFerry(s, t) {
+  if (s.path || s.wantPath) { if (dist(s.x, s.y, t.x, t.y) > 2.2) return; stopPath(s); }
+  if (!unloadShip(s) && s.owner === HUMAN) msg('No room to land there — pick a spot on the shore', true);
+  s.task = null;
+}
+// put the cargo on free land tiles next to the ship. Returns false if there is nowhere to land.
+function unloadShip(s) {
+  const cargo = cargoOf(s); if (!cargo.length) return true;
+  const spots = [], tx = Math.floor(s.x), ty = Math.floor(s.y);
+  const pp = PASS, pn = NAVAL; PASS = s.owner; NAVAL = 0;
+  for (const o of SPIRAL) { if (o[2] > 9) break; if (isWalk(tx + o[0], ty + o[1])) spots.push([tx + o[0] + 0.5, ty + o[1] + 0.5]); }
+  PASS = pp; NAVAL = pn;
+  if (!spots.length) return false;
+  cargo.forEach((u, k) => { const sp = spots[k % spots.length], jx = (k / spots.length | 0) * 0.2; u.carriedBy = 0; u.x = u.px = u.sx = sp[0] + jx; u.y = u.py = u.sy = sp[1]; u.task = null; resetNav(u); });
+  s.load = 0;
+  if (s.owner === HUMAN) Sfx.play('ack');
+  return true;
+}
 function depleteNode(n) { n.dead = true; n.deathT = 0; n.amount = 0; if (!n.animal) clearOcc(n); }
 // follow something that moves (a unit or an animal): re-path only when it has drifted from the old goal
 function chase(u, key, x, y) {
@@ -1377,6 +1444,7 @@ function taskConvert(u, t, dt) {
 function convertUnit(m, e) {
   const from = e.owner;
   e.owner = m.owner; e.task = null; resetNav(e);
+  for (const c of G.ents) if (c.kind === 'unit' && c.carriedBy === e.id) c.owner = m.owner;   // the crew of a converted Transport comes along
   m.faith = 0; m.task = null; resetNav(m);
   G.players[m.owner].stats.converted++; G.players[from].stats.lost++;
   if (from === HUMAN) { msg('Your ' + UNITS[e.type].name + ' was converted by an enemy monk!', true); Sfx.play('convert'); W.pings.push({ x: e.x, y: e.y, t: performance.now() }); }
@@ -1527,7 +1595,7 @@ function checkVictory() {
   for (const p of G.players) {
     if (p.defeated) continue;
     const hasTC = W.buildings.some(b => b.owner === p.id && b.type === 'towncenter' && !b.dead);
-    const hasVil = W.units.some(u => u.owner === p.id && u.type === 'villager' && !u.dead);
+    const hasVil = W.units.some(u => u.owner === p.id && u.type === 'villager' && !u.dead) || W.carried.some(u => u.owner === p.id && u.type === 'villager');
     if (!hasTC && !hasVil) { p.defeated = true; if (p.id !== HUMAN) msg(p.name + ' has been defeated!'); }
   }
   if (G.players[HUMAN].defeated) { endGame(false); return; }
@@ -1551,7 +1619,9 @@ function checkVictory() {
 function acquire(u) {
   const ud = UNITS[u.type]; if (ud.cls === 'monk') return null;
   const r = ud.los; let best = null, bd = r;
-  if (!ud.bldOnly) queryUnits(u.x, u.y, r, v => { if (!isEnemy(u.owner, v.owner)) return; const d = dist(u.x, u.y, v.x, v.y); if (d < bd) { bd = d; best = v; } });
+  // land melee can't reach ships; Demolition Ships only go for ships (and buildings)
+  const skip = v => (!ud.naval && !(ud.range > 0) && UNITS[v.type].naval) || (ud.navalTargets && !UNITS[v.type].naval);
+  if (!ud.bldOnly) queryUnits(u.x, u.y, r, v => { if (!isEnemy(u.owner, v.owner) || skip(v)) return; const d = dist(u.x, u.y, v.x, v.y); if (d < bd) { bd = d; best = v; } });
   if (best) return best;
   for (const b of W.buildings) { if (b.dead || !isEnemy(u.owner, b.owner)) continue; const d = distToRect(u.x, u.y, rectOf(b)); if (d < bd) { bd = d; best = b; } }
   return best;
@@ -1574,10 +1644,12 @@ function taskAttack(u, t) {
     if (u.cd <= 0) {
       u.cd = d.reload;
       let atk = ust(u.owner, u.type, 'atk'); if (d.frenzy && u.hp < u.maxHp / 2) atk += d.frenzy;
+      if (d.blast) { explode(u, atk, d); return; }
       if (d.stone) fireStone(u, e, atk, d);
       else {
         const dmg = calcDamage(atk, d.bonus, e, !!d.projectile);
-        if (d.projectile) fireArrow(u.x, u.y, e, dmg, u.owner, u.id); else { applyDamage(e, dmg, u, u.owner); sfxAt(d.siege ? 'ram' : 'hit', u.x, u.y); }
+        if (d.projectile) fireArrow(u.x, u.y, e, dmg, u.owner, u.id);
+        else { applyDamage(e, dmg, u, u.owner); if (d.flame) { u.flameT = G.time; u.flameTo = e.id; sfxAt('flame', u.x, u.y); } else sfxAt(d.siege ? 'ram' : 'hit', u.x, u.y); }
       }
     }
     return;
@@ -1588,6 +1660,15 @@ function taskAttack(u, t) {
     else approach(u, key, () => ({ x: e.x, y: e.y }));
   } else approach(u, key, () => ({ rect: tileRect(e) }));
   if (u.fails > 5) endAttack(u, t);
+}
+// Demolition Ship: one blast that wrecks every enemy unit and building nearby, and the boat itself
+function explode(u, atk, d) {
+  const R = d.blast;
+  queryUnits(u.x, u.y, R + 0.5, v => { if (v !== u && isEnemy(u.owner, v.owner) && dist(v.x, v.y, u.x, u.y) <= R) applyDamage(v, calcDamage(atk, d.bonus, v, false), u, u.owner); });
+  for (const b of W.buildings) if (!b.dead && isEnemy(u.owner, b.owner) && distToRect(u.x, u.y, rectOf(b)) <= R * 0.6) applyDamage(b, calcDamage(atk, d.bonus, b, false), u, u.owner);
+  W.blasts = W.blasts || []; if (W.blasts.length < 20) W.blasts.push({ x: u.x, y: u.y, r: R, t: performance.now() / 1000 });
+  sfxAt('blast', u.x, u.y);
+  kill(u, null);
 }
 function endAttack(u, t) { if (t.am) orderMove(u, t.am.x, t.am.y, true); else { u.task = null; resetNav(u); } }
 function fireArrow(x, y, target, dmg, owner, src) {
@@ -1641,6 +1722,8 @@ function kill(e, killerOwner) {
   }
   if (e.owner >= 0) G.players[e.owner].stats.lost++;
   if (e.kind === 'unit' && e.relic) { e.relic = false; dropRelic(e.x, e.y); }
+  // a sunk Transport takes its passengers down with it
+  if (e.kind === 'unit' && e.type === 'transport') for (const c of G.ents) if (c.kind === 'unit' && c.carriedBy === e.id && !c.dead) { c.carriedBy = 0; c.x = e.x; c.y = e.y; c.px = e.x; c.py = e.y; kill(c, killerOwner); }
   if (e.kind === 'building' && e.relics) { const n = e.relics; e.relics = 0; clearOcc(e); for (let k = 0; k < n; k++) dropRelic(e.cx, e.cy); }
   if (e.kind === 'building') clearOcc(e);
   sfxAt(e.kind === 'building' ? 'collapse' : 'death', ecx(e), ecy(e));
@@ -1916,7 +1999,7 @@ function computeFog() {
     for (let y = y0; y <= y1; y++) { const dy = y + 0.5 - cy; for (let x = x0; x <= x1; x++) { const dx = x + 0.5 - cx; if (dx * dx + dy * dy <= r2) { const i = y * MAP_W + x; V[i] = 1; EX[i] = 1; } } }
   };
   for (const e of G.ents) {
-    if (e.dead || e.owner !== HUMAN) continue;
+    if (e.dead || e.owner !== HUMAN || e.carriedBy) continue;
     if (e.kind === 'unit') stamp(e.x, e.y, UNITS[e.type].los);
     else stamp(e.cx, e.cy, e.built ? BUILDINGS[e.type].los + e.w / 2 : 2.5);
   }
@@ -2139,6 +2222,7 @@ function drawRider(c, type, col, x, y, s, face, anim, work) {
 }
 // Ships, seen from above: a planked hull pointing along `face`, a mast and a sail in the owner's colour.
 function drawShip(c, type, col, x, y, s, face, anim, carry, work) {
+  if (type !== 'fishingship') { drawWarship(c, type, col, x, y, s, face, anim, carry, work); return; }
   const L = 0.62 * s, Wd = 0.24 * s, bob = Math.sin(anim * 2.2) * 0.02 * s;
   c.save(); c.translate(x, y + bob); c.rotate(face);
   // wake and shadow
@@ -2161,6 +2245,40 @@ function drawShip(c, type, col, x, y, s, face, anim, carry, work) {
   c.beginPath(); c.moveTo(0.05 * s, -Wd * 1.6); c.quadraticCurveTo(0.05 * s + bil * 2, 0, 0.05 * s, Wd * 1.6); c.lineTo(-0.05 * s, Wd * 1.5); c.quadraticCurveTo(-0.05 * s + bil * 2, 0, -0.05 * s, -Wd * 1.5); c.closePath(); c.fill(); c.stroke();
   c.fillStyle = col.main; c.fillRect(-0.02 * s, -Wd * 1.5, 0.06 * s, Wd * 3);
   circle(c, 0, 0, 0.05 * s, '#4a3320');
+  c.restore();
+}
+// Galley (long, oars, ram), Fire Ship (brazier, dark sail), Demolition Ship (low raft of powder kegs), Transport (wide, cargo)
+function drawWarship(c, type, col, x, y, s, face, anim, load, work) {
+  const g = type === 'galley', fire = type === 'fireship', demo = type === 'demoship', tr = type === 'transport';
+  const L = (g ? 0.82 : demo ? 0.5 : tr ? 0.72 : 0.7) * s, Wd = (g ? 0.22 : demo ? 0.22 : tr ? 0.32 : 0.24) * s, bob = Math.sin(anim * 2.2) * 0.02 * s;
+  c.save(); c.translate(x, y + bob); c.rotate(face);
+  c.fillStyle = 'rgba(220,240,255,.28)'; c.beginPath(); c.ellipse(-L * 0.9, 0, L * 0.45, Wd * 0.9, 0, 0, TAU); c.fill();
+  c.fillStyle = 'rgba(0,0,0,.25)'; c.beginPath(); c.ellipse(0.04 * s, 0.07 * s, L, Wd * 1.05, 0, 0, TAU); c.fill();
+  // oars, rowing
+  if (g || fire) { const ph = Math.sin(anim * 5) * 0.08 * s; c.strokeStyle = '#5a3d22'; c.lineWidth = 0.025 * s; c.beginPath();
+    for (let k = 0; k < (g ? 5 : 3); k++) { const ox = -L * 0.45 + k * L * (g ? 0.22 : 0.3); for (const sd of [-1, 1]) { c.moveTo(ox, sd * Wd * 0.8); c.lineTo(ox - 0.06 * s + ph, sd * (Wd + 0.2 * s)); } } c.stroke(); }
+  const hull = () => { c.beginPath(); c.moveTo(L, 0); c.quadraticCurveTo(L * 0.45, -Wd * 1.25, -L * 0.8, -Wd); c.lineTo(-L * 0.9, 0); c.lineTo(-L * 0.8, Wd); c.quadraticCurveTo(L * 0.45, Wd * 1.25, L, 0); c.closePath(); };
+  if (demo) { c.fillStyle = '#6b4a2a'; c.fillRect(-L, -Wd, 2 * L, 2 * Wd); c.strokeStyle = '#3e2814'; c.lineWidth = 0.04 * s; c.strokeRect(-L, -Wd, 2 * L, 2 * Wd); }
+  else { hull(); c.fillStyle = fire ? '#4a3020' : '#7b5230'; c.fill(); c.strokeStyle = '#2e1c0c'; c.lineWidth = 0.04 * s; c.stroke();
+    c.save(); hull(); c.clip(); c.fillStyle = fire ? '#6b4a32' : '#a87c4f'; c.fillRect(-L, -Wd * 0.7, 2 * L, Wd * 1.4); c.restore(); }
+  if (g) { c.fillStyle = '#9aa1a8'; c.beginPath(); c.moveTo(L + 0.14 * s, 0); c.lineTo(L - 0.02 * s, -0.05 * s); c.lineTo(L - 0.02 * s, 0.05 * s); c.closePath(); c.fill();   // bronze ram
+    for (let k = 0; k < 4; k++) circle(c, -L * 0.5 + k * L * 0.3, 0, 0.05 * s, col.dark); }   // shields of the marines
+  if (demo) { for (let k = 0; k < 4; k++) { const bx = -L * 0.6 + (k % 2) * L * 0.6, by = (k < 2 ? -1 : 1) * Wd * 0.45; circle(c, bx, by, 0.1 * s, '#5a3a1a'); circle(c, bx, by, 0.07 * s, '#7b5230'); c.strokeStyle = '#2a1a0a'; c.lineWidth = 0.02 * s; c.beginPath(); c.arc(bx, by, 0.085 * s, 0, TAU); c.stroke(); }
+    c.strokeStyle = '#e8d06a'; c.lineWidth = 0.02 * s; c.beginPath(); c.moveTo(L * 0.5, 0); c.quadraticCurveTo(L * 0.8, -0.1 * s, L * 0.95, 0.04 * s); c.stroke();   // fuse
+    circle(c, L * 0.95, 0.04 * s, 0.03 * s * (1 + 0.5 * Math.sin(anim * 20)), '#ffcf5a');
+    c.fillStyle = col.main; c.fillRect(-L, -0.04 * s, 0.14 * s, 0.08 * s); }
+  if (tr) { // cargo deck: crates, and the heads of whoever is aboard
+    c.fillStyle = '#8a6a40'; c.fillRect(-L * 0.55, -Wd * 0.55, L * 0.9, Wd * 1.1); c.strokeStyle = 'rgba(40,25,10,.5)'; c.lineWidth = 0.02 * s; c.strokeRect(-L * 0.55, -Wd * 0.55, L * 0.9, Wd * 1.1);
+    for (let k = 0; k < Math.min(load || 0, 10); k++) circle(c, -L * 0.45 + (k % 5) * L * 0.18, (k < 5 ? -1 : 1) * Wd * 0.28, 0.07 * s, k % 2 ? col.main : col.light); }
+  if (fire) { // brazier of burning oil at the bow
+    const fl = 0.08 * s * (1 + 0.3 * Math.sin(anim * 13));
+    circle(c, L * 0.55, 0, 0.09 * s, '#3a2a1a'); circle(c, L * 0.55, 0, fl, '#ff7a1a'); circle(c, L * 0.55, 0, fl * 0.55, '#ffe08a'); }
+  if (!demo) { // mast and sail
+    const mx = g ? -0.05 * s : tr ? 0.15 * s : -0.1 * s, bil = 0.05 * s + Math.sin(anim * 1.7) * 0.015 * s, H = Wd * (tr ? 1.4 : 1.8);
+    c.fillStyle = fire ? '#5a2a20' : col.light; c.strokeStyle = col.dark; c.lineWidth = 0.03 * s;
+    c.beginPath(); c.moveTo(mx + 0.05 * s, -H); c.quadraticCurveTo(mx + 0.05 * s + bil * 2, 0, mx + 0.05 * s, H); c.lineTo(mx - 0.05 * s, H * 0.94); c.quadraticCurveTo(mx - 0.05 * s + bil * 2, 0, mx - 0.05 * s, -H * 0.94); c.closePath(); c.fill(); c.stroke();
+    c.fillStyle = col.main; c.fillRect(mx - 0.02 * s, -H * 0.94, 0.06 * s, H * 1.88);
+    circle(c, mx, 0, 0.05 * s, '#4a3320'); }
   c.restore();
 }
 function drawRam(c, col, x, y, s, face, anim, work) {
@@ -2470,6 +2588,8 @@ function buildIcons() {
   makeIcon('r_tree', c => { c.fillStyle = '#3d5a2a'; c.fillRect(0, 0, 64, 64); const s = 2; c.save(); c.scale(s, s); drawTree(c, 3, 5, 0, 0); c.restore(); });
   makeIcon('i_stop', c => { c.fillStyle = '#2a2018'; c.fillRect(0, 0, 64, 64); c.fillStyle = '#c0392b'; c.beginPath(); for (let k = 0; k < 8; k++) { const a = k / 8 * TAU + TAU / 16; c.lineTo(32 + Math.cos(a) * 22, 32 + Math.sin(a) * 22); } c.fill(); c.fillStyle = '#fff'; c.fillRect(20, 28, 24, 8); });
   makeIcon('i_amove', c => { c.fillStyle = '#2a2018'; c.fillRect(0, 0, 64, 64); c.strokeStyle = '#e5533d'; c.lineWidth = 4; c.beginPath(); c.arc(32, 32, 16, 0, TAU); c.stroke(); c.beginPath(); c.moveTo(32, 8); c.lineTo(32, 22); c.moveTo(32, 42); c.lineTo(32, 56); c.moveTo(8, 32); c.lineTo(22, 32); c.moveTo(42, 32); c.lineTo(56, 32); c.stroke(); circle(c, 32, 32, 4, '#ffd8a8'); });
+  makeIcon('i_unload', c => { c.fillStyle = '#2f6ea4'; c.fillRect(0, 0, 64, 64); c.fillStyle = '#c4b17b'; c.fillRect(0, 40, 64, 24); c.fillStyle = '#5f8f3c'; c.fillRect(0, 48, 64, 16);
+    c.strokeStyle = '#ffe08a'; c.lineWidth = 6; c.lineCap = 'round'; c.beginPath(); c.moveTo(32, 8); c.lineTo(32, 38); c.moveTo(20, 27); c.lineTo(32, 39); c.lineTo(44, 27); c.stroke(); circle(c, 32, 50, 6, '#2f6fe0'); });
   makeIcon('i_delete', c => { c.fillStyle = '#2a2018'; c.fillRect(0, 0, 64, 64); c.strokeStyle = '#e5533d'; c.lineWidth = 7; c.lineCap = 'round'; c.beginPath(); c.moveTo(18, 18); c.lineTo(46, 46); c.moveTo(46, 18); c.lineTo(18, 46); c.stroke(); });
 }
 
@@ -2491,7 +2611,7 @@ function render(alpha) {
   const inView = (x, y, m) => x > vx0 - m && x < vx1 + m && y > vy0 - m && y < vy1 + m;
   const farms = [], blds = [], nodes = [], units = [];
   for (const e of G.ents) {
-    if (e.kind === 'unit') { const x = e.px + (e.x - e.px) * alpha, y = e.py + (e.y - e.py) * alpha; if (inView(x, y, 1) && shownToHuman(e)) { e.rx = x; e.ry = y; units.push(e); } }
+    if (e.kind === 'unit') { if (e.carriedBy) continue; const x = e.px + (e.x - e.px) * alpha, y = e.py + (e.y - e.py) * alpha; if (inView(x, y, 1) && shownToHuman(e)) { e.rx = x; e.ry = y; units.push(e); } }
     else if (e.kind === 'building') { if (inView(e.cx, e.cy, 3) && shownToHuman(e)) (BUILDINGS[e.type].farm ? farms : blds).push(e); }
     else if (inView(e.cx, e.cy, 1) && shownToHuman(e)) nodes.push(e);
   }
@@ -2513,7 +2633,7 @@ function render(alpha) {
   for (const u of units) {
     c.save();
     if (u.dead) { const k = u.deathT / 1.4; c.globalAlpha = Math.max(0, 1 - k); c.translate(u.rx * TILE, u.ry * TILE); c.scale(1, Math.max(0.3, 1 - k)); c.translate(-u.rx * TILE, -u.ry * TILE); }
-    drawUnit(c, u.type, PCOL[u.owner], u.rx * TILE, u.ry * TILE, TILE, u.face, u.anim, u.type === 'monk' ? (u.relic ? 1 : 0) : u.carry, u.carryType, u.work);
+    drawUnit(c, u.type, PCOL[u.owner], u.rx * TILE, u.ry * TILE, TILE, u.face, u.anim, u.type === 'monk' ? (u.relic ? 1 : 0) : u.type === 'transport' ? (u.load || 0) : u.carry, u.carryType, u.work);
     if (u.hitT && G.time - u.hitT < 0.15 && !u.dead) { circle(c, u.rx * TILE, u.ry * TILE, TILE * 0.3, 'rgba(255,60,40,.35)'); }
     c.restore();
   }
@@ -2534,6 +2654,16 @@ function render(alpha) {
     c.strokeStyle = '#3b2a1a'; c.lineWidth = 1.6; c.beginPath(); c.moveTo(X - Math.cos(a) * L, Y - Math.sin(a) * L); c.lineTo(X, Y); c.stroke();
     c.strokeStyle = '#f0e6d0'; c.lineWidth = 1.2; c.beginPath(); c.moveTo(X - Math.cos(a) * L, Y - Math.sin(a) * L); c.lineTo(X - Math.cos(a) * L * 0.75, Y - Math.sin(a) * L * 0.75); c.stroke();
   }
+  // Fire Ships at work: a jet of burning oil to the target
+  for (const u of units) { if (u.dead || !u.flameT || G.time - u.flameT > 0.45) continue; const e = E(u.flameTo); if (!e || e.dead || e.rx == null) continue;
+    const k = (now * 6 + u.id) % 1, x0 = u.rx * TILE + Math.cos(u.face) * TILE * 0.45, y0 = u.ry * TILE + Math.sin(u.face) * TILE * 0.45, x1 = e.rx * TILE, y1 = e.ry * TILE;
+    const gr = c.createLinearGradient(x0, y0, x1, y1); gr.addColorStop(0, 'rgba(255,230,140,.95)'); gr.addColorStop(0.6, 'rgba(255,120,30,.8)'); gr.addColorStop(1, 'rgba(200,40,10,.2)');
+    c.strokeStyle = gr; c.lineWidth = 5 + 2 * Math.sin(k * TAU); c.lineCap = 'round'; c.beginPath(); c.moveTo(x0, y0); c.quadraticCurveTo((x0 + x1) / 2 + 4 * Math.sin(now * 9), (y0 + y1) / 2 - 6, x1, y1); c.stroke();
+    circle(c, x1, y1, TILE * (0.25 + 0.1 * k), 'rgba(255,140,40,.45)'); }
+  // Demolition Ship blasts
+  if (W.blasts && W.blasts.length) { W.blasts = W.blasts.filter(b => now - b.t < 0.9); for (const b of W.blasts) { if (!tileVisible(b.x, b.y)) continue; const k = (now - b.t) / 0.9;
+    circle(c, b.x * TILE, b.y * TILE, TILE * b.r * (0.4 + k * 0.8), `rgba(255,${Math.round(200 - 120 * k)},60,${0.8 * (1 - k)})`);
+    circle(c, b.x * TILE, b.y * TILE, TILE * b.r * 0.5 * (1 - k), `rgba(255,250,200,${0.9 * (1 - k)})`); } }
   // dust clouds where siege stones land
   if (W.dust && W.dust.length) { W.dust = W.dust.filter(d => now - d.t < 0.7); for (const d of W.dust) { if (!tileVisible(d.x, d.y)) continue; const k = (now - d.t) / 0.7; c.fillStyle = `rgba(150,130,100,${0.5 * (1 - k)})`; c.beginPath(); c.arc(d.x * TILE, d.y * TILE, TILE * (0.3 + d.r * k), 0, TAU); c.fill(); } }
   // fog
@@ -2660,13 +2790,13 @@ function infoOne(e) {
   if (e.kind === 'unit' && UNITS[e.type].civilian) {
     const d = UNITS[e.type], S = k => +ust(e.owner, e.type, k).toFixed(2);
     return `<div class="row"><img class="portrait" src="${iconFor(e)}"><div style="min-width:0"><div class="pname">${d.name}${ownerTag(e)}</div>${hpHtml(e)}
-      <div class="stats"><span>Carries <b>${carryCap(e)}</b></span><span>Armor <b>${S('armor')}</b>/<b>${S('parmor')}</b></span><span>Speed <b>${S('speed')}</b></span><span>Sight <b>${d.los}</b></span></div>
+      <div class="stats">${d.capacity ? `<span>Aboard <b>${cargoOf(e).length}/${capacityOf(e)}</b></span>` : `<span>Carries <b>${carryCap(e)}</b></span>`}<span>Armor <b>${S('armor')}</b>/<b>${S('parmor')}</b></span><span>Speed <b>${S('speed')}</b></span><span>Sight <b>${d.los}</b></span></div>
       ${e.owner === HUMAN ? `<div class="status">${taskText(e)}</div>` : ''}</div></div>`;
   }
   if (e.kind === 'unit') {
     const d = UNITS[e.type], S = k => +ust(e.owner, e.type, k).toFixed(2), atk = S('atk');
     return `<div class="row"><img class="portrait" src="${iconFor(e)}"><div style="min-width:0"><div class="pname">${d.name}${ownerTag(e)}</div>${hpHtml(e)}
-      <div class="stats"><span>Attack <b>${atk}</b></span><span>Armor <b>${S('armor')}</b>/<b>${S('parmor')}</b></span><span>Range <b>${d.range ? S('range') : 'melee'}</b></span><span>Speed <b>${S('speed')}</b></span><span>Sight <b>${d.los}</b></span>${d.bonus ? `<span>Strong vs <b>${Object.keys(d.bonus).filter(k => k !== 'siege').map(k => k === 'building' ? 'buildings' : k).join(', ')}</b></span>` : ''}</div>
+      <div class="stats"><span>Attack <b>${atk}</b></span><span>Armor <b>${S('armor')}</b>/<b>${S('parmor')}</b></span><span>Range <b>${d.range ? S('range') : 'melee'}</b></span><span>Speed <b>${S('speed')}</b></span><span>Sight <b>${d.los}</b></span>${d.bonus ? `<span>Strong vs <b>${Object.keys(d.bonus).filter(k => k !== 'siege').map(k => ({ building: 'buildings', ship: 'ships', demo: 'demolition ships' })[k] || k).join(', ')}</b></span>` : ''}</div>
       ${e.owner === HUMAN ? `<div class="status">${taskText(e)}</div>` : ''}</div></div>`;
   }
   const d = BUILDINGS[e.type];
@@ -2726,6 +2856,7 @@ function buildPanel() {
       acts += B('tech:' + id, ICONS['t_' + id], t.hotkey || '', tipFor(t, queued ? 'Researching now' : ok ? '' : 'Requires the ' + AGES[t.age].name), !ok, !canAfford(p, costOf(p, t)));
     }
   }
+  if (own.some(e => e.type === 'transport' && (e.load || 0) > 0)) acts += B('unload', ICONS.i_unload, 'U', '<b>Unload</b><br>Put everyone aboard ashore right here (the Transport must be next to land). Or tap a spot on the shore to sail there and land.');
   if (mil.length) acts += B('amove', ICONS.i_amove, 'Q', '<b>Attack-move</b><br>Move to a point, fighting any enemy met on the way.');
   if (own.some(e => e.kind === 'unit')) acts += B('stop', ICONS.i_stop, 'X', '<b>Stop</b>');
   if (own.length) acts += B('delete', ICONS.i_delete, '', '<b>Delete</b> (Del)<br>Unfinished, untouched foundations are refunded.');
@@ -2773,6 +2904,7 @@ function doAction(act, shift) {
     if (b) { const err = queueTech(b, arg); if (err) msg(err, true); else Sfx.play('click'); }
   } else if (cmd === 'cancel') { const b = s[0]; if (b && b.kind === 'building') cancelQueue(b, +arg); }
   else if (cmd === 'stop') { for (const u of s) if (u.kind === 'unit') orderStop(u); }
+  else if (cmd === 'unload') { for (const u of s) if (u.type === 'transport' && (u.load || 0) > 0) { orderStop(u); if (!unloadShip(u)) msg('Bring the Transport next to the shore first', true); } }
   else if (cmd === 'amove') { if (s.some(u => u.kind === 'unit' && u.type !== 'villager' && !UNITS[u.type].civilian)) { UI.cmd = 'amove'; UI.placing = null; } }
   else if (cmd === 'delete') {
     for (const e of s) {
@@ -2868,6 +3000,28 @@ function contextCommand(wx, wy) {
   }
   const now = performance.now() / 1000;
   Sfx.play('ack');
+  // land units + tap on your own Transport: go aboard (the Transport comes to the nearest shore to meet them)
+  if (tgt && tgt.kind === 'unit' && tgt.type === 'transport' && tgt.owner === HUMAN) {
+    const riders = units.filter(u => !UNITS[u.type].naval);
+    if (riders.length) {
+      const room = capacityOf(tgt) - cargoOf(tgt).length;
+      if (room <= 0) { msg('The Transport is full', true); return; }
+      const go = riders.slice(0, room); if (riders.length > room) msg(`Only ${room} more fit aboard`, true);
+      for (const u of go) orderBoard(u, tgt);
+      const cx = go.reduce((s, u) => s + u.x, 0) / go.length, cy = go.reduce((s, u) => s + u.y, 0) / go.length;
+      const near = go.some(u => dist(u.x, u.y, tgt.x, tgt.y) < 2.5);
+      if (!near) { const sp = shoreSpot(cx, cy); if (sp) orderMove(tgt, sp.x, sp.y); }
+      W.markers.push({ x: tgt.x, y: tgt.y, t: now, col: '#9fd8ff' });
+      units = units.filter(u => UNITS[u.type].naval); if (!units.length) return;
+    }
+  }
+  // loaded Transports + tap on land: sail there and put everyone ashore
+  const ferries = units.filter(u => u.type === 'transport' && (u.load || 0) > 0);
+  if (ferries.length && (!tgt || !isEnemy(HUMAN, tgt.owner)) && inB(Math.floor(wx), Math.floor(wy)) && isLand(idx(Math.floor(wx), Math.floor(wy)))) {
+    for (const f of ferries) orderFerry(f, wx, wy);
+    W.markers.push({ x: wx, y: wy, t: now, col: '#9fd8ff' });
+    units = units.filter(u => !ferries.includes(u)); if (!units.length) return;
+  }
   // monks: convert enemies, fetch relics, bring relics home, heal friends
   const monks = units.filter(u => u.type === 'monk');
   if (monks.length) {
